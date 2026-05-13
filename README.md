@@ -31,8 +31,9 @@
   - [UC2: New Member Registration](#uc2-new-member-registration)
   - [UC3: iCare Attendance with Photo](#uc3-icare-attendance-with-photo)
 - [Class Diagram](#class-diagram)
-  - [Domain Model](#domain-model)
-  - [Service Layer](#service-layer)
+  - [Current State — Domain Entities](#current-state--domain-entities)
+  - [Current State — Service, Email & Infrastructure](#current-state--service-email--infrastructure)
+  - [Target Architecture — Planned Extensions](#target-architecture--planned-extensions)
 - [Entity Relationship Diagram](#entity-relationship-diagram)
   - [Entity Overview](#entity-overview)
   - [Member (person\_per)](#member-person_per)
@@ -296,11 +297,32 @@ sequenceDiagram
 
 ## Class Diagram
 
-### Domain Model
+Two diagrams are presented: **Current State** (what is implemented) and **Target Architecture** (what must be added to satisfy all requirements discussed in this project).
+
+---
+
+### Current State — Domain Entities
+
+> Scanned from `src/ChurchCRM/model/ChurchCRM/`. All non-Base, non-Query classes. Propel `ActiveRecord` represents the generated ORM base.
 
 ```mermaid
 classDiagram
-    direction LR
+    direction TB
+
+    class PhotoInterface {
+        <<interface>>
+        +getPhoto()
+        +deletePhoto()
+        +setImageFromBase64(base64) void
+    }
+
+    class ActiveRecord {
+        <<Propel ORM base>>
+        +save() int
+        +delete() void
+        +toArray() array
+        +fromArray(data) void
+    }
 
     class Person {
         +int per_ID
@@ -313,11 +335,20 @@ classDiagram
         +int per_BirthYear
         +int per_cls_ID
         +int per_fam_ID
-        +DateTime per_DateEntered
-        +getBirthDate() DateTimeImmutable
         +getFullName() string
-        +postInsert() void
-        +postUpdate() void
+        +getBirthDate() DateTimeImmutable?
+        +getEmail() string?
+        +getPhoto() Photo
+        +setImageFromBase64(base64) void
+        +deletePhoto() bool
+        +postInsert(con) void
+        +postUpdate(con) void
+        +postSave(con) void
+        +getGroups() array
+        +isUser() bool
+        +getAddress() string
+        +getBestPhone() string
+        +getFormattedName(style) string
     }
 
     class Family {
@@ -326,7 +357,15 @@ classDiagram
         +string fam_Address1
         +string fam_City
         +string fam_Email
-        +postInsert() void
+        +getPeopleSorted() array
+        +getHeadPeople() array
+        +getEmails() array
+        +postInsert(con) void
+        +getPhoto() Photo?
+        +setImageFromBase64(base64) void
+        +verify() void
+        +isActive() bool
+        +hasLatitudeAndLongitude() bool
     }
 
     class Group {
@@ -335,15 +374,18 @@ classDiagram
         +int grp_Type
         +bool grp_active
         +int grp_RoleListID
+        +int grp_DefaultRole
     }
 
-    class Person2group2role {
+    class Person2group2roleP2g2r {
         +int p2g2r_per_ID
         +int p2g2r_grp_ID
         +int p2g2r_rle_ID
+        +getPerson() Person
+        +getGroup() Group
     }
 
-    class IcareMeeting {
+    class ICareMeeting {
         +int id
         +int group_id
         +Date meeting_date
@@ -352,6 +394,7 @@ classDiagram
         +string photo_filename
         +int created_by
         +DateTime created_at
+        +getGroup() Group
     }
 
     class ICareAttendance {
@@ -377,8 +420,10 @@ classDiagram
         +string event_title
         +DateTime event_start
         +DateTime event_end
+        +bool inactive
         +checkInPerson(personId, checkedInById) array
         +checkOutPerson(personId, checkedOutById) array
+        +getEventAttends() array
     }
 
     class EventAttend {
@@ -389,19 +434,11 @@ classDiagram
         +DateTime checkout_date
     }
 
-    class EventCount {
+    class EventCounts {
         +int evtcnt_eventid
+        +int evtcnt_countid
         +string evtcnt_countname
         +int evtcnt_countcount
-        +string evtcnt_notes
-    }
-
-    class User {
-        +int usr_ID
-        +string usr_Login
-        +string usr_Password
-        +int usr_per_ID
-        +bool isAdmin() bool
     }
 
     class KioskDevice {
@@ -411,82 +448,441 @@ classDiagram
         +string kdev_Name
     }
 
-    %% Relationships
+    class KioskAssignment {
+        +int kasm_ID
+        +int kasm_kdev_ID
+        +int kasm_evt_ID
+    }
+
+    class User {
+        +int usr_ID
+        +string usr_Login
+        +string usr_Password
+        +int usr_per_ID
+        +bool usr_Admin
+        +isAdmin() bool
+        +isEditRecordsEnabled() bool
+        +canEditPerson(personId, famId) bool
+    }
+
+    class Note {
+        +int nte_ID
+        +int nte_per_ID
+        +string nte_Text
+        +DateTime nte_DateEntered
+        +string nte_Type
+    }
+
+    %% Inheritance from Propel ActiveRecord
+    Person --|> ActiveRecord
+    Family --|> ActiveRecord
+    Group --|> ActiveRecord
+    Event --|> ActiveRecord
+    EventAttend --|> ActiveRecord
+    EventCounts --|> ActiveRecord
+    ICareMeeting --|> ActiveRecord
+    ICareAttendance --|> ActiveRecord
+    ICareVisitor --|> ActiveRecord
+    User --|> ActiveRecord
+    Note --|> ActiveRecord
+
+    %% Interface implementations
+    Person ..|> PhotoInterface
+    Family ..|> PhotoInterface
+
+    %% Associations
     Person "N" --> "1" Family : belongs to
-    Person "N" --> "N" Group : via Person2group2role
-    Person2group2role --> Person
-    Person2group2role --> Group
-
-    IcareMeeting "N" --> "1" Group : held by
-    ICareAttendance "N" --> "1" IcareMeeting : records
-    ICareAttendance "N" --> "1" Person : attends
-    ICareVisitor "N" --> "1" IcareMeeting : visits
-
-    EventAttend "N" --> "1" Event : checks into
-    EventAttend "N" --> "1" Person : who
-    EventCount "N" --> "1" Event : aggregates
-
-    User --> Person : linked to
+    Person2group2roleP2g2r --> Person
+    Person2group2roleP2g2r --> Group
+    ICareMeeting "N" --> "1" Group : held by
+    ICareAttendance "N" --> "1" ICareMeeting
+    ICareAttendance "N" --> "1" Person
+    ICareVisitor "N" --> "1" ICareMeeting
+    EventAttend "N" --> "1" Event
+    EventAttend "N" --> "1" Person
+    EventCounts "N" --> "1" Event
+    KioskAssignment --> KioskDevice
+    KioskAssignment --> Event
+    User --> Person : linked via usr_per_ID
+    Note "N" --> "1" Person
 ```
 
-### Service Layer
+---
+
+### Current State — Service, Email & Infrastructure
 
 ```mermaid
 classDiagram
     direction TB
 
+    %% ── Infrastructure ───────────────────────────────────────────────────────
+
+    class IAuthenticationProvider {
+        <<interface>>
+        +authenticate(request) AuthenticationResult
+        +validateUserSessionIsActive(update) AuthenticationResult
+        +getCurrentUser() User?
+        +endSession() void
+        +getPasswordChangeURL() string
+    }
+
+    class LocalAuthentication {
+        +authenticate(request) AuthenticationResult
+        +validateUserSessionIsActive(update) AuthenticationResult
+        +getCurrentUser() User?
+        +endSession() void
+        +getPasswordChangeURL() string
+        +getTwoFactorQRCode(username, secret)$ QrCode
+    }
+
+    class AuthenticationManager {
+        <<static facade>>
+        +getAuthenticationProvider()$ IAuthenticationProvider
+        +getCurrentUser()$ User
+        +isUserAuthenticated()$ bool
+        +authenticate(request)$ AuthenticationResult
+        +endSession(preventRedirect)$ void
+        +ensureAuthentication()$ void
+        +redirectHomeIfFalse(hasAccess, role)$ void
+        +redirectHomeIfNotAdmin()$ void
+    }
+
+    class AuthenticationResult {
+        +bool isAuthenticated
+        +string message
+    }
+
+    class HookManager {
+        <<static>>
+        +addAction(hook, callback, priority)$ void
+        +doAction(hook, args)$ void
+        +addFilter(hook, callback, priority)$ void
+        +applyFilters(hook, value, args)$ mixed
+        +removeAction(hook, callback)$ bool
+        +hasAction(hook)$ bool
+        +doingHook(hook)$ bool
+        +reset()$ void
+    }
+
+    class SystemConfig {
+        <<static DTO>>
+        +getValue(name)$ mixed
+        +getBooleanValue(name)$ bool
+        +getIntValue(name)$ int
+        +setValue(name, value)$ void
+        +isEmailEnabled()$ bool
+        +hasValidMailServerSettings()$ bool
+        +init(configs)$ void
+    }
+
+    class SystemURLs {
+        <<static DTO>>
+        +getRootPath()$ string
+        +getDocumentRoot()$ string
+        +getImagesRoot()$ string
+        +getURL(index)$ string
+        +getCSPNonce()$ string?
+    }
+
+    LocalAuthentication ..|> IAuthenticationProvider
+    AuthenticationManager --> IAuthenticationProvider : delegates to
+    AuthenticationManager --> AuthenticationResult : returns
+
+    %% ── Services ─────────────────────────────────────────────────────────────
+
     class QrCodeService {
-        -string QR_API
-        +getPersonCheckInUrl(person) string$
-        +fetchQrCodePng(url, sizePx) string$
-        +generateToken(personId) string$
-        +verifyToken(personId, token) bool$
-        -getSecret() string$
+        <<static utility>>
+        -QR_API$ = https://api.qrserver.com
+        +getPersonCheckInUrl(person)$ string
+        +fetchQrCodePng(url, sizePx)$ string
+        +generateToken(personId)$ string
+        +verifyToken(personId, token)$ bool
+        -getSecret()$ string
     }
 
     class ICareService {
-        -int PHOTO_MAX_WIDTH
-        -int PHOTO_MAX_HEIGHT
-        -int PHOTO_QUALITY
-        -int PHOTO_MAX_BYTES
+        -PHOTO_MAX_WIDTH$ = 1200
+        -PHOTO_MAX_HEIGHT$ = 900
+        -PHOTO_QUALITY$ = 82
+        -PHOTO_MAX_BYTES$ = 307200
+        -PHOTO_DIR$ = iCare
         +getGroupsForUser(userId) array
         +getGroupMembers(groupId) array
         +getMeetingsForGroup(groupId, limit) array
         +getMeetingDetail(meetingId) array
-        +createMeeting(groupId, userId, data) IcareMeeting
+        +createMeeting(groupId, userId, data) ICareMeeting
         +saveMeetingPhoto(meetingId, base64DataUri) string
-        +getMeetingPhotoPath(meetingId) string
+        +getMeetingPhotoPath(meetingId) string?
         +deleteMeeting(meetingId) void
+    }
+
+    class PersonService {
+        +search(term, includeFamilyRole) array
+        +getPeopleEmailsAndGroups() array
+        +addVolunteerOpportunity(personId, oppId) bool
+        +removeVolunteerOpportunity(personId, oppId) void
+        +getFamilyList(roleHead, roleSpouse, cls, term) array
+        +getMissingGenderDataCount() int
+    }
+
+    class GroupService {
+        +addUserToGroup(groupId, personId, roleId) array
+        +removeUserFromGroup(groupId, personId) void
+        +getGroupRoles(groupId) array
+        +getGroupMembers(groupId, personId) array
+        +addGroupRole(groupId, roleName) array
+        +deleteGroupRole(groupId, roleId) array
+    }
+
+    class EventService {
+        -MAX_REPEAT_OCCURRENCES$ = 366
+        +createRepeatEvents(data) int[]
+    }
+
+    class DashboardService {
+        +getFamilyCount() array
+        +getDashboardStats() array
+        +getGroupStats() array
+        +getLatestMembers(limit) array
+        +getUpdatedMembers(limit) array
+    }
+
+    class UserService {
+        +getAllUsers() collection
+        +getUserById(id) User?
+        +getUserStats() array
+        +isUserLocked(user) bool
+        +getLockedUsers() collection
+    }
+
+    ICareService ..> ICareMeeting : manages
+    ICareService ..> ICareAttendance : records
+    ICareService ..> ICareVisitor : registers
+    ICareService ..> SystemURLs : uses
+    QrCodeService ..> Person : generates URL for
+    QrCodeService ..> SystemConfig : reads secret
+    QrCodeService ..> SystemURLs : builds URL
+    PersonService ..> Person : queries
+    GroupService ..> Group : manages
+    GroupService ..> Person2group2roleP2g2r : manages
+    EventService ..> Event : creates
+
+    %% ── Email hierarchy ──────────────────────────────────────────────────────
+
+    class BaseEmail {
+        <<abstract>>
+        #PHPMailer mail
+        #Twig\Environment twig
+        +send() bool
+        +getError() string
+        +addStringAttachment(data, filename) void
+        +buildMessage() string
+        +getCommonTokens() array
+        #getTemplateName() string
+        #getTokens() array*
+        #getPreheader() string
+    }
+
+    class BaseUserEmail {
+        <<abstract>>
+        #User user
+        +getTokens() array
     }
 
     class WelcomeMemberEmail {
         -Person person
         -string checkInUrl
-        -string qrCid
-        +sendIfEnabled(person) void$
+        -string? qrCid
         +getTokens() array
         +getSubSubject() string
         +getPreheader() string
+        +sendIfEnabled(person)$ void
     }
 
-    class PersonService {
-        +addVolunteerOpportunity(personId, opportunityId) bool
+    class NewPersonOrFamilyEmail {
+        +getTokens() array
+        +sendIfConfigured(obj)$ void
     }
 
-    class EventService {
-        +createRepeatEvents(data) int[]
+    class NewAccountEmail {
+        -string password
+        +getTokens() array
     }
 
-    class GroupService {
-        +getGroupRoles() array
+    class ResetPasswordEmail {
+        -string password
+        +getTokens() array
     }
 
-    QrCodeService ..> Person : generates URL for
-    WelcomeMemberEmail ..> QrCodeService : uses
+    class TestEmail {
+        +getTokens() array
+    }
+
+    class FamilyVerificationEmail {
+        +getTokens() array
+    }
+
+    BaseEmail <|-- BaseUserEmail
+    BaseEmail <|-- WelcomeMemberEmail
+    BaseEmail <|-- NewPersonOrFamilyEmail
+    BaseEmail <|-- TestEmail
+    BaseEmail <|-- FamilyVerificationEmail
+    BaseUserEmail <|-- NewAccountEmail
+    BaseUserEmail <|-- ResetPasswordEmail
+    BaseUserEmail <|-- AccountDeletedEmail
+    BaseUserEmail <|-- LockedEmail
+    BaseUserEmail <|-- UnlockedEmail
+    BaseUserEmail <|-- ResetPasswordTokenEmail
+
+    WelcomeMemberEmail ..> QrCodeService : fetches QR PNG
     WelcomeMemberEmail ..> Person : sends to
-    ICareService ..> IcareMeeting : manages
-    ICareService ..> ICareAttendance : records
-    ICareService ..> ICareVisitor : registers
+    NewPersonOrFamilyEmail ..> Person : notifies about
+    NewPersonOrFamilyEmail ..> SystemConfig : checks recipients
+```
+
+---
+
+### Target Architecture — Planned Extensions
+
+> Classes and associations that **must be added** to satisfy the requirements discussed in this project. Marked `<<planned>>`.
+
+```mermaid
+classDiagram
+    direction TB
+
+    %% ── Existing classes referenced ──────────────────────────────────────────
+
+    class Person { }
+    class Group { }
+    class IAuthenticationProvider {
+        <<interface>>
+    }
+    class QrCodeService { }
+    class WelcomeMemberEmail { }
+
+    %% ── Google OAuth — member & admin login ──────────────────────────────────
+
+    class GoogleOAuthProvider {
+        <<planned>>
+        -string clientId
+        -string clientSecret
+        +authenticate(request) AuthenticationResult
+        +validateUserSessionIsActive(update) AuthenticationResult
+        +getCurrentUser() Person?
+        +endSession() void
+        +getPasswordChangeURL() string
+        +generateRedirectUrl(state) string
+        +exchangeCode(code) GoogleProfile
+        +findOrLinkPerson(googleSub, email) Person?
+        +linkPersonToGoogleSub(person, sub) void
+    }
+
+    class GoogleOAuthRequest {
+        <<planned>>
+        +string code
+        +string state
+        +string redirectUri
+    }
+
+    class GoogleProfile {
+        <<planned>>
+        +string sub
+        +string email
+        +string name
+        +string picture
+    }
+
+    note for Person "Requires new column:\nper_google_sub VARCHAR(64) UNIQUE NULL\nper_google_email VARCHAR(100) NULL"
+
+    %% ── iCare Co-leaders ─────────────────────────────────────────────────────
+
+    class ICareCoLeader {
+        <<planned>>
+        +int id
+        +int group_id
+        +int person_id
+        +Date added_date
+        +bool is_active
+        +getGroup() Group
+        +getPerson() Person
+    }
+
+    note for ICareCoLeader "Table: icare_co_leaders\nRole: can submit attendance\nfor their assigned group"
+
+    %% ── Google Calendar birthday push ────────────────────────────────────────
+
+    class GoogleCalendarService {
+        <<planned>>
+        -string calendarId
+        -GoogleClient client
+        +createBirthdayEvent(person) string
+        +updateBirthdayEvent(person) void
+        +deleteBirthdayEvent(person) void
+        +syncAllBirthdays() array
+        +getBirthdayEventId(person) string?
+        -buildEventDescription(person) string
+    }
+
+    note for GoogleCalendarService "Requires:\n- Google service account JSON\n- sGoogleCalendarId setting\n- per_birthday_event_id column on Person\n(or separate mapping table)"
+
+    %% ── Member self-service (post-OAuth) ─────────────────────────────────────
+
+    class MemberPortalService {
+        <<planned>>
+        +findPersonByEmail(email) Person?
+        +sendQrCodeByEmail(person) void
+        +updateMemberProfile(person, data) void
+        +createMemberSession(person) string
+        +validateMemberSession(token) Person?
+    }
+
+    class MemberSession {
+        <<planned>>
+        +string token
+        +int person_id
+        +DateTime expires_at
+        +bool isExpired() bool
+    }
+
+    %% ── Fingerprint import ───────────────────────────────────────────────────
+
+    class FingerprintImportService {
+        <<planned>>
+        +importTsv(filePath, activityTypeId) array
+        +parseRow(line) array
+        +matchPersonByFingerprintId(fpId) Person?
+    }
+
+    %% ── Birthday .ics export ─────────────────────────────────────────────────
+
+    class BirthdayIcsExportService {
+        <<planned>>
+        +generateIcsFeed() string
+        +generateIcsForPerson(person) string
+        -formatDate(birthDay, birthMonth) string
+    }
+
+    %% ── Relationships ────────────────────────────────────────────────────────
+
+    GoogleOAuthProvider ..|> IAuthenticationProvider
+    GoogleOAuthProvider ..> GoogleOAuthRequest : accepts
+    GoogleOAuthProvider ..> GoogleProfile : produces
+    GoogleOAuthProvider ..> MemberPortalService : delegates lookup
+    GoogleOAuthProvider ..> Person : links
+
+    ICareCoLeader --> Group
+    ICareCoLeader --> Person
+
+    GoogleCalendarService ..> Person : reads birthday
+    GoogleCalendarService ..> SystemConfig : reads calendarId
+
+    MemberPortalService ..> Person : looks up & updates
+    MemberPortalService ..> QrCodeService : generates QR URL
+    MemberPortalService ..> WelcomeMemberEmail : sends QR email
+    MemberPortalService ..> MemberSession : creates
+
+    FingerprintImportService ..> Person : matches by fp_id
+    BirthdayIcsExportService ..> Person : reads birthdays
 ```
 
 ---

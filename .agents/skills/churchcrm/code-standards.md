@@ -556,6 +556,19 @@ gh pr comment NUMBER --body "## Follow-up changes pushed\n\n..."
 **Service Container:** `src/ChurchCRM/ServiceContainerBuilder.php`
 **Logs:** `src/logs/`
 
+**IFGF-specific services (added 2026-05):**
+
+- **QR Code:** `src/ChurchCRM/Service/QrCodeService.php` — HMAC-signed check-in URL generation, QR PNG fetching from `api.qrserver.com`
+- **iCare attendance:** `src/ChurchCRM/Service/ICareService.php` — group meetings, bulk attendance, compressed photo upload (≤ 300 KB enforced via GD quality loop)
+- **Welcome email:** `src/ChurchCRM/Emails/WelcomeMemberEmail.php` — triggered from `Person::postInsert()` when `bSendWelcomeEmail` is enabled
+- **Public portal routes:** `src/external/routes/member-portal.php` — QR resend by email (`POST /external/member-portal/resend-qr`), self-service check-in (`GET /external/checkin`)
+- **Public portal template:** `src/external/templates/member-portal.php` and `checkin.php`
+- **iCare DB migration:** `src/mysql/upgrade/7.4.0-icare.sql` — creates `icare_meeting`, `icare_attendance`, `icare_visitor` tables
+- **iCare models:** `src/ChurchCRM/model/ChurchCRM/ICareMeeting.php`, `ICareAttendance.php`, `ICareVisitor.php`
+- **iCare API routes:** `src/api/routes/icare/` — groups, attendance, history, meeting-detail
+- **iCare UI route:** `src/v2/routes/icare.php`, `src/v2/templates/icare/`
+- **iCare JS:** `webpack/icare-attendance.ts` — TypeScript entry for the attendance page
+
 ### ChurchMetaData — Typed String/Float Getters, No Caller Casting <!-- learned: 2026-04-22 -->
 
 All string getters on `ChurchMetaData` return **typed, non-null, trimmed**

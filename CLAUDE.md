@@ -25,6 +25,8 @@ Structured development skills live in `.agents/skills/`. **Always consult the re
 | New community plugin | `plugin-system.md` → `plugin-development.md` → `plugin-create.md` → `plugin-security-scan.md` |
 | Core plugin update (`src/plugins/core/*`) | `plugin-system.md` → `plugin-development.md` → `plugin-migration.md` |
 | Admin-side plugin audit | `plugin-system.md` → `plugin-compliance.md` |
+| iCare attendance / photo upload | `service-layer.md` → `database-operations.md` → `api-development.md` → `db-schema-migration.md` |
+| Member QR code / public portal | `routing-architecture.md` → `security-best-practices.md` → `service-layer.md` |
 | Testing | `testing.md` → `cypress-testing.md` |
 | Commit / PR | `git-workflow.md` → `github-interaction.md` |
 | Refactor | `refactor.md` → `service-layer.md` |
