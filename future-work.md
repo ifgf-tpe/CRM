@@ -4,6 +4,44 @@ This document tracks planned features and exploratory ideas for ChurchCRM that a
 
 ---
 
+## Table of Contents
+
+<!-- toc -->
+
+- [Face Recognition for Attendance Tracking](#face-recognition-for-attendance-tracking)
+  - [Option A — Browser-Side Face Recognition (face-api.js)](#option-a--browser-side-face-recognition-face-apijs)
+  - [Option B — Server-Side Face Recognition (Python Microservice)](#option-b--server-side-face-recognition-python-microservice)
+  - [Option C — Cloud Vision API (AWS Rekognition / Google Cloud Vision / Azure Face)](#option-c--cloud-vision-api-aws-rekognition--google-cloud-vision--azure-face)
+  - [Option D — QR Code / NFC Hybrid ✅ Implemented](#option-d--qr-code--nfc-hybrid--implemented)
+  - [Recommended Phasing](#recommended-phasing)
+  - [Privacy & Consent Requirements (all face recognition options)](#privacy--consent-requirements-all-face-recognition-options)
+  - [Open Questions](#open-questions)
+- [Deployment Strategy — Zero/Low-Cost Hosting](#deployment-strategy--zerolow-cost-hosting)
+  - [Option 1 — Cloudflare Tunnel + Your Own PC (Fully Free)](#option-1--cloudflare-tunnel--your-own-pc-fully-free)
+  - [Option 2 — Oracle Cloud Free Tier (Fully Free, Cloud-Hosted)](#option-2--oracle-cloud-free-tier-fully-free-cloud-hosted)
+  - [Option 3 — DDNS + Home Server + Port Forwarding](#option-3--ddns--home-server--port-forwarding)
+  - [Option 4 — Shared PHP/MySQL Web Hosting (Paid, Best Value)](#option-4--shared-phpmysql-web-hosting-paid-best-value)
+  - [Option 5 — VPS (Virtual Private Server) — Full Control, Low Cost](#option-5--vps-virtual-private-server--full-control-low-cost)
+  - [Decision Guide](#decision-guide)
+  - [Recommended Path for This Project](#recommended-path-for-this-project)
+  - [Cloudflare Free Features Worth Using (All Options)](#cloudflare-free-features-worth-using-all-options)
+- [IFGF Ecosystem → ChurchCRM: Full Integration Plan](#ifgf-ecosystem--churchcrm-full-integration-plan)
+  - [Project Overview](#project-overview)
+  - [Feature Coverage Map](#feature-coverage-map)
+  - [Gaps: Features Not Yet in ChurchCRM](#gaps-features-not-yet-in-churchcrm)
+  - [New Requirements](#new-requirements)
+  - [Recommended Work Items](#recommended-work-items)
+- [Feature Usage Guides](#feature-usage-guides)
+  - [Guide 1: Weekly Attendance via QR Code](#guide-1-weekly-attendance-via-qr-code)
+  - [Guide 2: Member Registration Flow](#guide-2-member-registration-flow)
+  - [Guide 3: Member Self-Service Portal](#guide-3-member-self-service-portal)
+  - [Guide 4: iCare Attendance with Photo Upload (Planned)](#guide-4-icare-attendance-with-photo-upload-planned)
+  - [Guide 5: Google Account Login / OAuth (Planned)](#guide-5-google-account-login--oauth-planned)
+
+<!-- tocstop -->
+
+---
+
 ## Face Recognition for Attendance Tracking
 
 **Status:** Exploratory / Not Scheduled  
@@ -406,5 +444,385 @@ Regardless of which hosting option you choose, put Cloudflare in front of your d
 Add your domain to Cloudflare, change your registrar's nameservers to Cloudflare's, and point the A record to your server IP with the "Proxied" (orange cloud) toggle on.
 
 ---
+
+*Added: 2026-05-13*
+
+---
+
+## IFGF Ecosystem → ChurchCRM: Full Integration Plan
+
+**Status:** Planning
+
+**Background:** Three companion projects exist alongside this ChurchCRM instance — a Google Apps Script automation (`church-member-management`), a FastAPI backend (`IFGF-Web-Server`), and a React admin frontend (`IFGF-Web-Admin`). This section maps every feature across all four systems and identifies what still needs to be built into ChurchCRM to make it the single source of truth.
+
+---
+
+### Project Overview
+
+| Project | Stack | Role |
+| --- | --- | --- |
+| `church-member-management` | Google Apps Script | Registration automation via Google Forms, birthday calendar events, QR code generation and email |
+| `IFGF-Web-Server` | FastAPI + PostgreSQL | REST API backend — members, iCare, CGSL, ministries, attendance, auth |
+| `IFGF-Web-Admin` | React + Vite | Admin frontend — mirrors what the server exposes via JWT-gated routes |
+| `ChurchCRM` (this repo) | PHP 8.4 / Slim 4 / MySQL | Full church management — people, families, groups, events, kiosk, finance, reports |
+
+---
+
+### Feature Coverage Map
+
+✅ = implemented · 🔶 = partial / different model · ❌ = not present
+
+| Feature | GAS | Web-Server | Web-Admin | ChurchCRM |
+| --- | --- | --- | --- | --- |
+| Member CRUD (name, birthday, phone, email) | ✅ Google Sheets | ✅ | ✅ | ✅ |
+| Chinese name field | ✅ | ✅ | ✅ | ✅ (per_FirstName2) |
+| iCare group membership | ✅ (column in sheet) | ✅ | ✅ | ✅ via Groups |
+| CGSL tracking (Come/Grow/Serve/Lead) | ❌ | ✅ | ✅ | ❌ |
+| Ministry team management | ❌ | ✅ | ✅ | 🔶 Groups + volunteer opps |
+| Role-based admin access | ❌ | ✅ JWT | ✅ | ✅ User roles |
+| Weekly attendance check-in (manual) | ❌ | ✅ | ✅ | ✅ kiosk + event check-in |
+| Attendance via QR code scan | ✅ Google Form | ❌ | ❌ | ✅ `/external/checkin` |
+| Fingerprint device attendance import | ❌ | ✅ TSV import | ✅ | ❌ |
+| iCare bulk attendance (leader-only) | ❌ | ✅ | ✅ | ❌ |
+| iCare co-leaders | ❌ | ❌ | ❌ | ❌ |
+| iCare attendance photo upload | ❌ | ❌ | ❌ | ❌ |
+| Birthday calendar (internal) | ❌ | ❌ | ❌ | ✅ BirthdaysCalendar |
+| Birthday → Google Calendar events | ✅ | ❌ | ❌ | ❌ |
+| QR code per member (static, ID-based) | ✅ | ❌ | ❌ | ✅ |
+| Welcome email with QR code | ✅ | ❌ | ❌ | ✅ |
+| Member self-service portal (public) | ✅ GAS web app | ❌ | ❌ | ✅ `/external/member-portal` |
+| Member self-service QR resend | ✅ | ❌ | ❌ | ✅ |
+| Member login to edit own profile | ❌ | ❌ | ❌ | ❌ |
+| Google OAuth login | ❌ | ❌ | ❌ | ❌ |
+| At-risk member detection | ❌ | ✅ | ✅ | ❌ |
+| Dashboard stats + charts | ❌ | ✅ | ✅ | ✅ |
+| Reports + CSV export | ❌ | ✅ | ✅ | ✅ |
+| CGSL material tracking | ❌ | ✅ | ✅ | ❌ |
+| Activity types + sessions | ❌ | ✅ | ✅ | 🔶 Events |
+| Registration form webhook | ✅ Google Form | ❌ | ❌ | ❌ |
+| Form open/close scheduling | ✅ | ❌ | ❌ | ❌ |
+
+---
+
+### Gaps: Features Not Yet in ChurchCRM
+
+#### From IFGF-Web-Server / Web-Admin
+
+1. **CGSL tracking** — The spiritual formation program (Come / Grow / Serve / Lead) with batch numbers, materials, teachers, and student rosters has no equivalent concept in ChurchCRM. ChurchCRM Groups can model it loosely but lack the CGSL-specific fields.
+
+2. **Fingerprint device attendance import** — The web admin can upload a TSV export from a hardware fingerprint scanner and bulk-insert attendance records. ChurchCRM has kiosk check-in but no fingerprint import path.
+
+3. **iCare bulk attendance (by leader)** — The web admin lets an iCare leader select all present members in one click for a given session date. ChurchCRM's kiosk records attendance per event but there's no iCare-leader-specific bulk check-in UI.
+
+4. **At-risk member detection** — Dashboard widget showing active members who haven't attended in N weeks. Not in ChurchCRM's dashboard.
+
+5. **Activity types + sessions** — Structured activity type → session → registration model. ChurchCRM uses a looser Event model.
+
+#### From GAS (not yet in ChurchCRM)
+
+1. **Birthday → Google Calendar sync** — ChurchCRM's `BirthdaysCalendar` shows birthdays in the built-in calendar view but does NOT push events to Google Calendar. Requires Google Calendar API + OAuth service account.
+
+2. **Registration form webhook** — No `POST /api/public/register` endpoint to receive submissions from an external form (Google Forms, Typeform, etc.).
+
+#### New Requirements (from design review)
+
+1. **iCare co-leaders** — Each iCare has 1 leader and multiple co-leaders. Neither ChurchCRM nor the web server supports co-leaders; `IcareGroup.leader_id` is a single foreign key.
+
+2. **iCare attendance with photo evidence** — Leaders upload a photo of the iCare activity when submitting attendance for that week. No project currently supports photo upload on an iCare session.
+
+3. **Member self-login + profile editing** — Members should be able to log in (ideally with Google OAuth) to view their QR code, update their birthday, and change their iCare group. Currently ChurchCRM requires admin access for all edits.
+
+4. **Google OAuth login** — Single sign-on via Google Account for both admin users and church members. No project currently implements OAuth.
+
+5. **Static QR code design** — ✅ Already correct in ChurchCRM. The QR encodes `HMAC-SHA256(personId, secret)` — it never changes when member details change. Only re-generated on member request.
+
+---
+
+### Recommended Work Items
+
+Priority order for completing ChurchCRM as the single system:
+
+| Priority | Feature | Effort | Blocks |
+| --- | --- | --- | --- |
+| 🔴 High | Member self-login page (Google OAuth) | High | #10, #13 |
+| 🔴 High | iCare co-leader model + UI | Medium | #8 |
+| 🔴 High | iCare attendance with photo upload | Medium | #9 |
+| 🟠 Medium | iCare bulk check-in page (leader UI) | Medium | #3 |
+| 🟠 Medium | Birthday → Google Calendar push | Medium | #6 |
+| 🟠 Medium | Member self-service profile edit | Medium | needs #10 |
+| 🟡 Low | CGSL group/session tracking | High | — |
+| 🟡 Low | Fingerprint TSV import | Low | — |
+| 🟡 Low | At-risk member dashboard widget | Low | — |
+| 🟡 Low | Registration form webhook endpoint | Medium | — |
+| 🟡 Low | Birthday `.ics` feed export | Low | — |
+
+---
+
+## Feature Usage Guides
+
+Usage guides for features that are already live in ChurchCRM, plus design specs for planned features.
+
+---
+
+### Guide 1: Weekly Attendance via QR Code
+
+**Status:** ✅ Implemented (`/external/checkin`)
+
+**How it works end-to-end:**
+
+```
+Member's phone camera
+       ↓ scans QR code on screen / printed card
+/external/checkin?pid={id}&token={hmac}
+       ↓ validates HMAC token
+Looks up today's church event (any event scheduled for today)
+       ↓ calls Event::checkInPerson()
+Attendance recorded in ChurchCRM database
+       ↓
+Confirmation page shown to member
+```
+
+**One-time admin setup:**
+
+1. Go to **Admin → System Settings → New Members & Greeting**.
+2. Set **QR Code Secret** (`sQrCodeSecret`) to a long random string (e.g., 32 random chars). Keep it private — this signs all member QR codes.
+3. Make sure at least one church **Event** is created in the calendar for each Sunday service.
+
+**Member setup (one-time per member):**
+
+1. Open the member's profile page in ChurchCRM (People → find member).
+2. The **Attendance QR Code** card in the left column shows their personal QR code.
+3. The member can either:
+   - Screenshot it on their phone and add to their phone's home screen / Wallet.
+   - Print it as a card to carry.
+   - Bookmark the **Open check-in link** URL directly.
+
+**Weekly check-in flow:**
+
+1. Member arrives at church.
+2. Member opens their camera app (iOS/Android) and points it at their QR code.
+3. Phone opens `/external/checkin?pid=…&token=…` in the browser.
+4. If a church event is scheduled for today → attendance is recorded automatically.
+5. Member sees: *"You're checked in! Welcome, [Name]!"* with the event name and date.
+
+**What if the member forgot their QR code?**
+
+1. Member visits `/external/member-portal` on any browser.
+2. Clicks **"Get / Resend My Attendance QR Code"**.
+3. Enters their registered email address.
+4. QR code is emailed to them within seconds.
+
+**Notes:**
+
+- The QR code URL never changes — it is derived from the member's numeric ID only, not their name or details.
+- If `sQrCodeSecret` is rotated, all existing QR codes become invalid and must be regenerated. Avoid rotating unless the secret is compromised.
+- If no event is scheduled for today, the check-in page shows a friendly "no event today" message and does not record anything.
+
+---
+
+### Guide 2: Member Registration Flow
+
+**Status:** ✅ Partially implemented — admin creates member; QR + email auto-sent if enabled.
+
+**Admin creates a new member:**
+
+1. Go to **People → Add Person** (or **Family → Add Family** for families).
+2. Fill in: Full Name, Chinese Name (optional), Date of Birth, Phone, Email, iCare group.
+3. Click **Save**.
+4. If **Send Welcome Email** (`bSendWelcomeEmail`) is enabled:
+   - A welcome email is automatically sent to the member's email.
+   - The email includes their personal attendance QR code as an inline image.
+   - Subject line is configurable via `sWelcomeEmailSubject`.
+
+**To enable welcome emails:**
+
+- Admin → System Settings → New Members & Greeting → toggle **Send Welcome Email** to ON.
+- Ensure SMTP is configured under Email Settings.
+
+#### a. Birthday Registration
+
+**Current state:** Birthday is stored on the member record (Birth Day / Month / Year fields). The built-in **Birthdays Calendar** in ChurchCRM's calendar view shows all member birthdays.
+
+**Planned — Birthday → Google Calendar push:**
+
+- When a member is saved with a birthday, ChurchCRM will create a recurring annual event in a configured Google Calendar.
+- Requires: Google Calendar API credentials + service account, plus `sGoogleCalendarId` system setting.
+- Admin can run **"Sync All Birthdays"** to bulk-push all existing records.
+- See [Recommended Work Items](#recommended-work-items) — item #6.
+
+#### b. QR Code Generation
+
+**Current state:** ✅ Live.
+
+- QR code is generated on-demand by the member profile page (admin view) and in the welcome email.
+- The QR code is **static** — it encodes `personId + HMAC token` only. It never changes when the member updates their name, phone, birthday, or iCare group.
+- Members can view their QR code at any time:
+  - Admin shows it on the profile page (printed or screenshot).
+  - Member requests it via `/external/member-portal`.
+- A new QR code is only "needed" if the signing secret (`sQrCodeSecret`) changes, which should be a rare event.
+
+#### c. Google Account Login (Planned)
+
+**Current state:** ❌ Not implemented in any project.
+
+**Planned design:**
+
+1. A **"Sign in with Google"** button appears on `/external/member-portal` and the new `/external/login` page.
+2. The OAuth 2.0 flow redirects to Google, the user grants permission, and Google returns their email.
+3. ChurchCRM looks up a `Person` record where `per_Email = google_email`. If found → session created.
+4. If no match → show a "not registered" message with instructions to contact admin.
+5. Admins also gain the option to log in with Google (mapping to the `Users` table by email).
+
+**What's needed:**
+
+- Google Cloud project with OAuth 2.0 credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`).
+- New `google_sub` column on the Person/User table to store the Google account ID.
+- PHP OAuth library: `league/oauth2-google` (Composer).
+- New Slim routes: `GET /external/auth/google`, `GET /external/auth/google/callback`.
+- System settings: `sGoogleOAuthClientId`, `sGoogleOAuthClientSecret`.
+
+**Effort:** High — but once done, it simplifies member onboarding significantly (no password needed).
+
+#### d. Member Profile Update (Planned)
+
+**Current state:** ❌ Members cannot log in to edit their own profile.
+
+**Planned design (requires Google OAuth login):**
+1. Member logs in at `/external/member-portal` via Google.
+2. Member sees a simple form with editable fields: birthday, phone, address, iCare group.
+3. On save:
+   - Profile updated in ChurchCRM database.
+   - If birthday changed → Google Calendar event updated (requires item #6).
+   - If iCare group changed → admin notified; group roster updated.
+4. Member's QR code remains unchanged (it's still just their person ID).
+
+---
+
+### Guide 3: Member Self-Service Portal
+
+**Status:** ✅ Implemented (`/external/member-portal`)
+
+**Public URL:** `https://yourchurch.example.com/external/member-portal`
+
+**Features:**
+
+| Action | How |
+| --- | --- |
+| Register as a new member | Click the "Register" button → opens the self-registration form (if enabled) |
+| Get / resend QR code | Click "Get My QR Code" → enter email → QR sent to inbox |
+| Check in via QR scan | Member scans their QR code → redirects to `/external/checkin` |
+
+**The "Resend QR Code" form:**
+1. Member clicks **"Get / Resend My Attendance QR Code"**.
+2. Enters their registered email address.
+3. Clicks **"Send My QR Code"**.
+4. System looks up the Person by email.
+5. If found: sends a welcome email with the QR code attached.
+6. Response is always *"If that email is registered, you will receive your QR code shortly"* — this prevents email enumeration.
+
+**Note:** The portal is fully public (no login required) and works on any device. Share the URL with members via WhatsApp, church bulletin, or QR code on the notice board.
+
+---
+
+### Guide 4: iCare Attendance with Photo Upload (Planned)
+
+**Status:** ❌ Not implemented in any project. Design spec below.
+
+**Context:** Each iCare meeting, the leader and co-leaders submit attendance for their members and upload a photo of the activity as evidence.
+
+**Proposed data model:**
+
+```sql
+-- Add to icare_groups:
+ALTER TABLE person_grp ADD COLUMN grp_co_leader_ids JSON;
+-- OR: new table
+CREATE TABLE grp_co_leaders (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  grp_id INT NOT NULL REFERENCES person_grp(grp_id),
+  per_id INT NOT NULL REFERENCES person_per(per_id),
+  added_date DATE NOT NULL,
+  is_active BOOL NOT NULL DEFAULT TRUE
+);
+
+-- New table for iCare sessions with photo:
+CREATE TABLE icare_sessions (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  grp_id INT NOT NULL REFERENCES person_grp(grp_id),
+  session_date DATE NOT NULL,
+  photo_url VARCHAR(500),
+  notes TEXT,
+  created_by INT REFERENCES user_usr(usr_id),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_icare_session (grp_id, session_date)
+);
+
+-- Attendance per iCare session:
+CREATE TABLE icare_attendance (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  session_id INT NOT NULL REFERENCES icare_sessions(id),
+  per_id INT NOT NULL REFERENCES person_per(per_id),
+  UNIQUE KEY uq_icare_att (session_id, per_id)
+);
+```
+
+**Proposed UI flow:**
+
+1. iCare leader or co-leader logs in to ChurchCRM.
+2. Navigates to **Groups → [their iCare group] → Record Attendance**.
+3. Sees a date picker (defaults to today / last Sunday).
+4. Sees a checklist of all current group members — checks off who attended.
+5. Uploads a photo of the activity (drag-drop or file picker).
+6. Clicks **Submit**.
+7. System saves the `icare_session` record + attendance rows + photo file.
+8. Admin can view session history per group including the photo evidence.
+
+**iCare co-leader model:**
+
+- One iCare group has exactly 1 **leader** and 0–N **co-leaders**.
+- Both leaders and co-leaders can submit attendance for their group.
+- Only super-admins can reassign leadership.
+- The new role `icare_co_leader` is needed in the Roles system.
+
+**Photo storage options:**
+
+- **Local disk:** Save to `src/Images/icare/` (simple, already used for member photos).
+- **Object storage (S3 / Cloudflare R2):** Better for production (no disk space concern, CDN delivery). R2 free tier is 10 GB/month — more than enough for church activity photos.
+
+---
+
+### Guide 5: Google Account Login / OAuth (Planned)
+
+**Status:** ❌ Not implemented in any project.
+
+**Why it matters:** Removes the barrier of password management for church members. Members can log in with the Google account they already use daily, simplifying self-registration and profile editing.
+
+**Implementation plan:**
+
+1. **Google Cloud setup (one-time):**
+   - Create a Google Cloud project at console.cloud.google.com.
+   - Enable the **Google+ API** and **OAuth 2.0**.
+   - Create OAuth credentials with redirect URI: `https://yourchurch.example.com/external/auth/google/callback`.
+   - Copy the **Client ID** and **Client Secret**.
+   - Add to ChurchCRM System Settings: `sGoogleOAuthClientId`, `sGoogleOAuthClientSecret`.
+
+2. **ChurchCRM changes needed:**
+   - Add `per_google_sub` column to `person_per` table (stores the unique Google account ID).
+   - New Slim routes in `src/external/`:
+     - `GET /external/auth/google` → redirect to Google OAuth consent page.
+     - `GET /external/auth/google/callback` → exchange code for token, look up Person by `google_sub` or email, create session.
+   - Session stored in a PHP session or signed JWT cookie.
+   - "Sign in with Google" button on `/external/member-portal`.
+   - Optional: same Google login for admin users (mapping to `Users` table).
+
+3. **Member experience:**
+   - First-time: Member clicks "Sign in with Google" → grants permission → Google returns their email.
+   - ChurchCRM matches email to a `Person` record. If found → linked automatically.
+   - If not found → "Your Google account is not linked to a member record. Please contact the church office."
+   - Once linked → member can view their QR code and edit their profile on every subsequent visit without any login prompt (Google handles the auth).
+
+4. **Security considerations:**
+   - Store `google_sub` (not just email) as the primary link — emails can change.
+   - All member-facing data endpoints must check that the session's `person_id` matches the requested resource.
+   - Admin routes remain separate (require ChurchCRM user login, not Google OAuth).
 
 *Added: 2026-05-13*
