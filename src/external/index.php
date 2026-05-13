@@ -31,6 +31,7 @@ require __DIR__ . '/routes/register.php';
 require __DIR__ . '/routes/verify.php';
 require __DIR__ . '/routes/calendar.php';
 require __DIR__ . '/routes/system.php';
+require __DIR__ . '/routes/member-portal.php';
 
 // Run app
 $app->run();

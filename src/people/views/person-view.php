@@ -80,6 +80,26 @@ $fam_Longitude      = (float) ($personData['fam_Longitude'] ?? 0);
             </div>
         </div>
 
+        <!-- Attendance QR Code -->
+        <div class="card mb-3">
+            <div class="card-header d-flex align-items-center">
+                <h3 class="card-title"><?= gettext('Attendance QR Code') ?></h3>
+            </div>
+            <div class="card-body text-center">
+                <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?data=<?= urlencode($qrCheckInUrl) ?>&size=180x180&qzone=1"
+                    alt="<?= gettext('Attendance QR Code') ?>"
+                    width="180" height="180"
+                    class="mb-2"
+                    style="border-radius:4px;border:1px solid #e0e0e0;"
+                >
+                <p class="text-body-secondary small mb-2"><?= gettext('Scan to check in') ?></p>
+                <a href="<?= htmlspecialchars($qrCheckInUrl, ENT_QUOTES) ?>" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
+                    <?= gettext('Open check-in link') ?>
+                </a>
+            </div>
+        </div>
+
         <!-- Contact & Personal Info -->
         <div class="card mb-3">
             <div class="card-header d-flex align-items-center">

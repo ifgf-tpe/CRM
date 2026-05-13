@@ -11,6 +11,7 @@ use ChurchCRM\model\ChurchCRM\PersonVolunteerOpportunityQuery;
 use ChurchCRM\model\ChurchCRM\VolunteerOpportunityQuery;
 use ChurchCRM\Service\PersonService;
 use ChurchCRM\Service\PropertyService;
+use ChurchCRM\Service\QrCodeService;
 use ChurchCRM\Service\TimelineService;
 use ChurchCRM\Slim\SlimUtils;
 use ChurchCRM\Utils\InputUtils;
@@ -253,6 +254,8 @@ $app->get('/view/{personID:[0-9]+}', function (Request $request, Response $respo
         'personMapConfig'        => $personMapConfig,
         'familyHasCoords'        => $familyHasCoords,
         'personTimeline'         => $personTimeline,
+        // QR code
+        'qrCheckInUrl'           => QrCodeService::getPersonCheckInUrl($person),
     ];
 
     return $renderer->render($response, 'person-view.php', $pageArgs);

@@ -9,7 +9,7 @@ This file is loaded by Claude Code for every session. Follow these instructions 
 Structured development skills live in `.agents/skills/`. **Always consult the relevant skill before starting work.**
 
 - **Index**: [`.agents/skills/churchcrm/SKILL.md`](.agents/skills/churchcrm/SKILL.md) — use this to find the right skill for your task
-- **Generic skills**: `gh-cli`, `interface-design`, `php-best-practices`, `web-design-guidelines` (see `.agents/skills/`)
+- **Generic skills**: [`milestone-sweep.md`](.agents/skills/milestone-sweep.md), [`pr-description-guidelines.md`](.agents/skills/pr-description-guidelines.md), [`pr-review-fix.md`](.agents/skills/pr-review-fix.md) (see `.agents/skills/`)
 
 ### Skill Selection by Task
 
@@ -71,13 +71,13 @@ Update the relevant skill file immediately when you:
 
 ### Memory File Sync
 
-After updating a skill file, also check if [`.claude/projects/.../memory/MEMORY.md`] needs a one-line summary added under **Critical Patterns**.
+After updating a skill file, also check if the project auto-memory index (`~/.claude/projects/<sanitized-cwd>/memory/MEMORY.md`) needs a one-line summary added under **Critical Patterns**.
 
 ---
 
 ## After PR Review Sessions
 
-- After completing PR review fixes and pushing, always update the relevant skill files in `.claude/skills/` with new learnings (cypress-testing.md, api-development.md, git-workflow.md, etc.) before ending the session
+- After completing PR review fixes and pushing, always update the relevant skill files in `.agents/skills/churchcrm/` with new learnings (cypress-testing.md, api-development.md, git-workflow.md, etc.) before ending the session
 - If no genuine new learnings emerged, explicitly say so rather than padding with trivia
 
 ---

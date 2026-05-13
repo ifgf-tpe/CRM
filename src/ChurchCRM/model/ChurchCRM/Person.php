@@ -7,6 +7,7 @@ use ChurchCRM\dto\Photo;
 use ChurchCRM\dto\SystemConfig;
 use ChurchCRM\dto\SystemURLs;
 use ChurchCRM\Emails\notifications\NewPersonOrFamilyEmail;
+use ChurchCRM\Emails\WelcomeMemberEmail;
 use ChurchCRM\model\ChurchCRM\Base\Person as BasePerson;
 use ChurchCRM\PhotoInterface;
 use ChurchCRM\Plugin\Hook\HookManager;
@@ -156,6 +157,8 @@ class Person extends BasePerson implements PhotoInterface
         if (empty($this->getFamId())) {
             NewPersonOrFamilyEmail::sendIfConfigured($this);
         }
+
+        WelcomeMemberEmail::sendIfEnabled($this);
 
         HookManager::doAction(Hooks::PERSON_CREATED, $this);
     }
