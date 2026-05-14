@@ -62,5 +62,6 @@ require __DIR__ . '/routes/users/user.php';
 require __DIR__ . '/routes/users/user-current.php';
 require __DIR__ . '/routes/users/user-settings.php';
 require __DIR__ . '/routes/map.php';
+require __DIR__ . '/routes/icare/icare.php';
 
 $app->run();

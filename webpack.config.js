@@ -40,6 +40,7 @@ module.exports = {
     'event-editor': './webpack/event-editor',
     'event-types-list': './webpack/event-types-list',
     'event-cart-to-event': './webpack/event-cart-to-event',
+    'icare-attendance': './webpack/icare-attendance',
   },
   output: {
     path: path.resolve('./src/skin/v2'),

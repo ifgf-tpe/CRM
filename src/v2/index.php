@@ -19,5 +19,6 @@ require __DIR__ . '/routes/cart.php';
 require __DIR__ . '/routes/user-current.php';
 require __DIR__ . '/routes/root.php';
 require __DIR__ . '/routes/map.php';
+require __DIR__ . '/routes/icare.php';
 
 $app->run();

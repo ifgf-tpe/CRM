@@ -40,6 +40,7 @@ class Menu
             'People'       => self::getPeopleMenu($isAdmin, $isMenuOptions, $currentUser->isAddRecordsEnabled()),
             'Groups'       => self::getGroupMenu($isAdmin, $isMenuOptions, $isManageGroups),
             'SundaySchool' => self::getSundaySchoolMenu($isAdmin),
+            'ICare'        => self::getICareMenu(),
             'Communication' => self::getCommunicationMenu(),
             'Events'       => self::getEventsMenu($currentUser->isAddEventEnabled(), $canViewEvents),
             'Deposits'     => self::getDepositsMenu($isAdmin, $currentUser->isFinanceEnabled()),
@@ -187,6 +188,12 @@ class Menu
         }
 
         return $sundaySchoolMenu;
+    }
+
+    private static function getICareMenu(): MenuItem
+    {
+        $menu = new MenuItem(gettext('iCare'), 'v2/icare', true, 'fa-people-group');
+        return $menu;
     }
 
     private static function getCommunicationMenu(): MenuItem

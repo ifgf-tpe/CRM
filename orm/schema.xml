@@ -917,4 +917,70 @@
  </table>
  -->
 
+    <table name="icare_meeting" idMethod="native" phpName="ICareMeeting" description="One iCare (cell group) meeting session">
+        <column name="id" phpName="Id" type="INTEGER" sqlType="int unsigned" primaryKey="true" autoIncrement="true" required="true"/>
+        <column name="group_id" phpName="GroupId" type="SMALLINT" size="8" sqlType="mediumint(8) unsigned" required="true"/>
+        <column name="meeting_date" phpName="MeetingDate" type="DATE" required="true"/>
+        <column name="location" phpName="Location" type="VARCHAR" size="255"/>
+        <column name="notes" phpName="Notes" type="LONGVARCHAR"/>
+        <column name="photo_filename" phpName="PhotoFilename" type="VARCHAR" size="255"/>
+        <column name="created_by" phpName="CreatedBy" type="INTEGER" sqlType="int unsigned" required="true" defaultValue="0"/>
+        <column name="created_at" phpName="CreatedAt" type="TIMESTAMP" required="true"/>
+        <foreign-key foreignTable="group_grp">
+            <reference local="group_id" foreign="grp_ID"/>
+        </foreign-key>
+        <index name="icare_meeting_group_date">
+            <index-column name="group_id"/>
+            <index-column name="meeting_date"/>
+        </index>
+        <vendor type="mysql">
+            <parameter name="Engine" value="InnoDB"/>
+            <parameter name="Charset" value="utf8mb4"/>
+            <parameter name="Collate" value="utf8mb4_unicode_ci"/>
+        </vendor>
+    </table>
+
+    <table name="icare_attendance" idMethod="native" phpName="ICareAttendance" description="Existing members who attended an iCare meeting">
+        <column name="id" phpName="Id" type="INTEGER" sqlType="int unsigned" primaryKey="true" autoIncrement="true" required="true"/>
+        <column name="meeting_id" phpName="MeetingId" type="INTEGER" sqlType="int unsigned" required="true"/>
+        <column name="person_id" phpName="PersonId" type="INTEGER" sqlType="int unsigned" required="true"/>
+        <column name="recorded_at" phpName="RecordedAt" type="TIMESTAMP" required="true"/>
+        <foreign-key foreignTable="icare_meeting" onDelete="CASCADE">
+            <reference local="meeting_id" foreign="id"/>
+        </foreign-key>
+        <foreign-key foreignTable="person_per">
+            <reference local="person_id" foreign="per_ID"/>
+        </foreign-key>
+        <unique name="icare_attend_unique">
+            <unique-column name="meeting_id"/>
+            <unique-column name="person_id"/>
+        </unique>
+        <vendor type="mysql">
+            <parameter name="Engine" value="InnoDB"/>
+            <parameter name="Charset" value="utf8mb4"/>
+            <parameter name="Collate" value="utf8mb4_unicode_ci"/>
+        </vendor>
+    </table>
+
+    <table name="icare_visitor" idMethod="native" phpName="ICareVisitor" description="Walk-in visitors (not yet members) at an iCare meeting">
+        <column name="id" phpName="Id" type="INTEGER" sqlType="int unsigned" primaryKey="true" autoIncrement="true" required="true"/>
+        <column name="meeting_id" phpName="MeetingId" type="INTEGER" sqlType="int unsigned" required="true"/>
+        <column name="full_name" phpName="FullName" type="VARCHAR" size="100" required="true" defaultValue=""/>
+        <column name="phone" phpName="Phone" type="VARCHAR" size="30"/>
+        <column name="instagram" phpName="Instagram" type="VARCHAR" size="100"/>
+        <column name="address" phpName="Address" type="VARCHAR" size="255"/>
+        <column name="created_at" phpName="CreatedAt" type="TIMESTAMP" required="true"/>
+        <foreign-key foreignTable="icare_meeting" onDelete="CASCADE">
+            <reference local="meeting_id" foreign="id"/>
+        </foreign-key>
+        <index name="icare_visitor_meeting">
+            <index-column name="meeting_id"/>
+        </index>
+        <vendor type="mysql">
+            <parameter name="Engine" value="InnoDB"/>
+            <parameter name="Charset" value="utf8mb4"/>
+            <parameter name="Collate" value="utf8mb4_unicode_ci"/>
+        </vendor>
+    </table>
+
 </database>

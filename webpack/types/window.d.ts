@@ -33,6 +33,12 @@ interface CRMNamespace {
   [key: string]: unknown;
 }
 
+interface ICareNamespace {
+  groupId: number;
+  rootPath: string;
+}
+
 interface Window {
   CRM?: CRMNamespace;
+  ICARE?: ICareNamespace;
 }
