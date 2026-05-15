@@ -889,117 +889,208 @@ classDiagram
 
 ## Entity Relationship Diagram
 
-This section documents the database entity-relationship model used to manage church membership, event attendance, and iCare (cell group) activity for IFGF Taiwan.
-Source of truth: `Jemaat & Absensi.xlsx` (sheets: *Daftar Jemaat*, *Daftar Absensi*, *Absensi iCare*, *Absen-TPE/ZL*).
+> **Note:** The ERD is expressed as a **UML Class Diagram** because each database table maps 1-to-1 to a Propel ORM model class. The `<<entity>>` stereotype marks persistence classes; attributes carry SQL types; key ORM methods are included. This format is richer than a plain ERD while remaining a complete database specification.
+
+### Key Distinction: Person vs User
+
+| Concept | Meaning |
+| --- | --- |
+| **Person** (`person_per`) | Every human stored in the system — church members, family members, guests, CRM staff. No login required. |
+| **User** (`user_usr`) | The subset of Persons who have CRM login credentials. `User` is a **specialization of Person**: its primary key `usr_per_ID` is the same value as `person_per.per_ID`. You cannot create a User without first creating a Person. Most Persons never become Users. |
+
+> **Rule:** Person ← is-a ← User. A User record adds credentials and permissions on top of an existing Person record. They share one PK value.
 
 ### Entity Overview
 
-| Entity | DB Table | Purpose |
+| ORM Class | DB Table | Purpose |
 | --- | --- | --- |
-| **Member** | `person_per` | Church member profile |
-| **iCare Group** | `group_grp` (type = iCare) | Cell group definition |
-| **iCare Meeting** | `icare_meeting` | One weekly iCare session |
-| **iCare Member Attendance** | `icare_attendance` | Existing members at an iCare session |
-| **iCare Visitor** | `icare_visitor` | Walk-in non-members at iCare |
-| **Event** | `events_event` | All church events (Super Sunday, Worship Night, etc.) |
-| **Event Attendance** | `event_attend` | Individual member check-in via QR code |
-| **Event Count** | `eventcounts_evtcnt` | Aggregate headcount per event session |
+| `Person` | `person_per` | Every person in the system (members, family, staff) |
+| `User` | `user_usr` | **Specializes Person** — adds CRM login + permissions |
+| `Family` | `family_fam` | Household / church-location grouping |
+| `Group` | `group_grp` | Generic group (iCare cells, Sunday School, any type) |
+| `GroupMembership` | `person2group2role_p2g2r` | Person ↔ Group ↔ Role junction table |
+| `IcareMeeting` | `icare_meeting` | One weekly iCare cell-group session |
+| `IcareAttendance` | `icare_attendance` | Member attendance at an iCare session |
+| `IcareVisitor` | `icare_visitor` | Walk-in non-member at iCare |
+| `Event` | `events_event` | All church events (Sunday, Worship Night, special) |
+| `EventAttendance` | `event_attend` | Individual QR scan check-in at an event |
+| `EventHeadcount` | `eventcounts_evtcnt` | Aggregate per-category count per event session |
+| `KioskDevice` | `kioskdevice_kdev` | Registered check-in tablet/kiosk |
 
 ```mermaid
-erDiagram
-    person_per {
-        int per_ID PK
-        varchar per_FirstName
-        varchar per_LastName
-        varchar per_Email
-        varchar per_CellPhone
-        tinyint per_BirthDay
-        tinyint per_BirthMonth
-        smallint per_BirthYear
-        tinyint per_cls_ID
-        smallint per_fam_ID
+classDiagram
+    direction TB
+
+    class Member {
+        <<entity: person_per>>
+        +MEDIUMINT per_ID PK
+        +VARCHAR per_FirstName
+        +VARCHAR per_LastName
+        +VARCHAR per_Email
+        +VARCHAR per_CellPhone
+        +VARCHAR per_Facebook "LINE ID"
+        +VARCHAR per_Twitter  "Instagram"
+        +TINYINT  per_BirthDay
+        +TINYINT  per_BirthMonth
+        +SMALLINT per_BirthYear
+        +TINYINT  per_cls_ID  FK
+        +SMALLINT per_fam_ID  FK
+        +DATETIME per_DateEntered
+        +DATETIME per_DateLastEdited
+        +getBirthDate() DateTimeImmutable
+        +getFullName() string
+        +getEmail() string
+        +getGroups() array
+        +postInsert(con) void
+        +postUpdate(con) void
     }
 
-    family_fam {
-        int fam_ID PK
-        varchar fam_Name
-        varchar fam_Address1
-        varchar fam_City
+    class Family {
+        <<entity: family_fam>>
+        +MEDIUMINT fam_ID PK
+        +VARCHAR   fam_Name
+        +VARCHAR   fam_Address1
+        +VARCHAR   fam_Address2
+        +VARCHAR   fam_City
+        +VARCHAR   fam_State
+        +VARCHAR   fam_Zip
+        +VARCHAR   fam_Country
+        +VARCHAR   fam_Email
+        +DOUBLE    fam_Latitude
+        +DOUBLE    fam_Longitude
+        +getPeopleSorted() array
+        +getEmails() array
+        +isActive() bool
     }
 
-    group_grp {
-        smallint grp_ID PK
-        varchar grp_Name
-        tinyint grp_Type
-        bool grp_active
+    class IcareGroup {
+        <<entity: group_grp>>
+        +MEDIUMINT grp_ID   PK
+        +VARCHAR   grp_Name
+        +TINYINT   grp_Type
+        +MEDIUMINT grp_RoleListID  FK
+        +MEDIUMINT grp_DefaultRole FK
+        +TEXT      grp_Description
+        +BOOLEAN   grp_hasSpecialProps
+        +BOOLEAN   grp_active
     }
 
-    person2group2role_p2g2r {
-        int p2g2r_per_ID FK
-        smallint p2g2r_grp_ID FK
-        smallint p2g2r_rle_ID
+    class IcareMembership {
+        <<entity: person2group2role_p2g2r>>
+        +MEDIUMINT p2g2r_per_ID FK
+        +MEDIUMINT p2g2r_grp_ID FK
+        +MEDIUMINT p2g2r_rle_ID FK "Leader=1 Member=2"
+        +getPerson() Member
+        +getGroup()  IcareGroup
     }
 
-    icare_meeting {
-        int id PK
-        smallint group_id FK
-        date meeting_date
-        varchar location
-        text notes
-        varchar photo_filename
-        int created_by
-        timestamp created_at
+    class IcareMeeting {
+        <<entity: icare_meeting>>
+        +INT       id           PK
+        +SMALLINT  group_id     FK
+        +DATE      meeting_date
+        +VARCHAR   location
+        +LONGTEXT  notes
+        +VARCHAR   photo_filename "JPEG ≤ 300 KB"
+        +INT       created_by   FK
+        +TIMESTAMP created_at
+        +getGroup() IcareGroup
     }
 
-    icare_attendance {
-        int id PK
-        int meeting_id FK
-        int person_id FK
-        timestamp recorded_at
+    class IcareAttendance {
+        <<entity: icare_attendance>>
+        +INT       id         PK
+        +INT       meeting_id FK
+        +INT       person_id  FK
+        +TIMESTAMP recorded_at
+        "UNIQUE(meeting_id, person_id)"
     }
 
-    icare_visitor {
-        int id PK
-        int meeting_id FK
-        varchar full_name
-        varchar phone
-        varchar instagram
-        varchar address
-        timestamp created_at
+    class IcareVisitor {
+        <<entity: icare_visitor>>
+        +INT       id         PK
+        +INT       meeting_id FK
+        +VARCHAR   full_name
+        +VARCHAR   phone
+        +VARCHAR   instagram
+        +VARCHAR   address
+        +TIMESTAMP created_at
     }
 
-    events_event {
-        int event_id PK
-        int event_type FK
-        varchar event_title
-        timestamp event_start
-        timestamp event_end
+    class Event {
+        <<entity: events_event>>
+        +INT       event_id   PK
+        +INT       event_type FK
+        +VARCHAR   event_title
+        +VARCHAR   event_desc
+        +TIMESTAMP event_start
+        +TIMESTAMP event_end
+        +INT       inactive   "0=active"
+        +checkInPerson(pid, byId) array
+        +checkOutPerson(pid, byId) array
+        +getEventAttends() collection
     }
 
-    event_attend {
-        int attend_id PK
-        int event_id FK
-        int person_id FK
-        timestamp checkin_date
-        timestamp checkout_date
+    class EventAttendance {
+        <<entity: event_attend>>
+        +INT      attend_id    PK
+        +INT      event_id     FK
+        +INT      person_id    FK
+        +DATETIME checkin_date
+        +INT      checkin_id   FK
+        +DATETIME checkout_date
+        +INT      checkout_id  FK
+        "UNIQUE(event_id, person_id)"
     }
 
-    eventcounts_evtcnt {
-        int evtcnt_eventid FK
-        varchar evtcnt_countname
-        int evtcnt_countcount
+    class EventCount {
+        <<entity: eventcounts_evtcnt>>
+        +INT     evtcnt_eventid  FK
+        +INT     evtcnt_countid  FK
+        +VARCHAR evtcnt_countname "Adult|College|Youth|Kids|Online"
+        +INT     evtcnt_countcount
+        +VARCHAR evtcnt_notes
     }
 
-    person_per }|--|| family_fam : "belongs to"
-    person2group2role_p2g2r }|--|| person_per : "member"
-    person2group2role_p2g2r }|--|| group_grp : "group"
-    icare_meeting }|--|| group_grp : "held by"
-    icare_attendance }|--|| icare_meeting : "session"
-    icare_attendance }|--|| person_per : "who"
-    icare_visitor }|--|| icare_meeting : "visits"
-    event_attend }|--|| events_event : "event"
-    event_attend }|--|| person_per : "who"
-    eventcounts_evtcnt }|--|| events_event : "aggregates"
+    class KioskDevice {
+        <<entity: kioskdevice_kdev>>
+        +MEDIUMINT kdev_ID           PK
+        +CHAR      kdev_GUIDHash
+        +VARCHAR   kdev_Name
+        +MEDIUMINT kdev_deviceType
+        +TIMESTAMP kdev_lastHeartbeat
+        +BOOLEAN   kdev_Accepted
+        +VARCHAR   kdev_PendingCommands
+    }
+
+    class User {
+        <<entity: user_usr>>
+        +MEDIUMINT usr_per_ID     PK FK
+        +VARCHAR   usr_Password
+        +DATETIME  usr_LastLogin
+        +SMALLINT  usr_LoginCount
+        +TINYINT   usr_AddRecords
+        +TINYINT   usr_EditRecords
+        +TINYINT   usr_Admin
+        +TINYINT   usr_MenuOptions
+        +isAdmin() bool
+        +isEditRecordsEnabled() bool
+        +canEditPerson(pid, famId) bool
+    }
+
+    %% ── Relationships ────────────────────────────────────────────────────────
+
+    Family       "1"  <--  "0..*" Member         : per_fam_ID
+    IcareGroup   "1"  <--  "0..*" IcareMembership : p2g2r_grp_ID
+    Member       "1"  <--  "0..*" IcareMembership : p2g2r_per_ID
+    IcareGroup   "1"  *--  "0..*" IcareMeeting    : group_id
+    IcareMeeting "1"  *--  "0..*" IcareAttendance : meeting_id
+    IcareMeeting "1"  *--  "0..*" IcareVisitor    : meeting_id
+    Member       "1"  <--  "0..*" IcareAttendance : person_id
+    Event        "1"  *--  "0..*" EventAttendance  : event_id
+    Member       "1"  <--  "0..*" EventAttendance  : person_id
+    Event        "1"  *--  "0..*" EventCount       : evtcnt_eventid
+    Member       "1"  --   "0..1" User             : usr_per_ID
 ```
 
 ### Member (`person_per`)

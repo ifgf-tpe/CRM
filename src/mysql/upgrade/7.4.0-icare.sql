@@ -16,9 +16,9 @@ CREATE TABLE `icare_meeting` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `icare_attendance` (
-    `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `meeting_id`  INT UNSIGNED NOT NULL,
-    `person_id`   INT UNSIGNED NOT NULL,
+    `id`          INT UNSIGNED          NOT NULL AUTO_INCREMENT,
+    `meeting_id`  INT UNSIGNED          NOT NULL,
+    `person_id`   MEDIUMINT(9) UNSIGNED NOT NULL,
     `recorded_at` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `icare_attend_unique` (`meeting_id`, `person_id`),
