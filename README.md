@@ -31,20 +31,18 @@
   - [UC2: New Member Registration](#uc2-new-member-registration)
   - [UC3: iCare Attendance with Photo](#uc3-icare-attendance-with-photo)
 - [Class Diagram](#class-diagram)
-  - [Current State — Domain Entities](#current-state--domain-entities)
-  - [Current State — Service, Email & Infrastructure](#current-state--service-email--infrastructure)
-  - [Target Architecture — Planned Extensions](#target-architecture--planned-extensions)
-- [Entity Relationship Diagram](#entity-relationship-diagram)
-  - [Entity Overview](#entity-overview)
-  - [Member (person\_per)](#member-person_per)
-  - [iCare Group (group\_grp)](#icare-group-group_grp)
-  - [iCare Meeting (icare\_meeting)](#icare-meeting-icare_meeting)
-  - [iCare Member Attendance (icare\_attendance)](#icare-member-attendance-icare_attendance)
-  - [iCare Visitor (icare\_visitor)](#icare-visitor-icare_visitor)
-  - [Event (events\_event)](#event-events_event)
-  - [Event Attendance (event\_attend)](#event-attendance-event_attend)
-  - [Event Count (eventcounts\_evtcnt)](#event-count-eventcounts_evtcnt)
-  - [Business Rules](#business-rules)
+  - [Data Dictionary](#data-dictionary)
+    - [Person (person\_per, user\_usr combined)](#person-person_per-user_usr-combined)
+    - [Family (family\_fam)](#family-family_fam)
+    - [Group (group\_grp)](#group-group_grp)
+    - [GroupMembership pivot (person2group2role)](#groupmembership-pivot-person2group2role)
+    - [Meeting (icare\_meeting)](#meeting-icare_meeting)
+    - [MeetingAttendance (icare\_attendance)](#meetingattendance-icare_attendance)
+    - [MeetingVisitor (icare\_visitor)](#meetingvisitor-icare_visitor)
+    - [Event (events\_event)](#event-events_event)
+    - [Attendance (event\_attend)](#attendance-event_attend)
+    - [Headcount (eventcounts\_evtcnt)](#headcount-eventcounts_evtcnt)
+    - [Business Rules](#business-rules)
 - [API Reference](#api-reference)
 - [Installation](#installation)
 - [Usage Guides](#usage-guides)
@@ -166,43 +164,72 @@ graph TD
 
 ## Use Case Diagram
 
+> **Actor design:** `Admin` and `iCare Leader` are **independent roles** — both extend `Church Member` (they are members first), but share **no hierarchy or permission overlap** between them.
+
 ```mermaid
 graph LR
-    Admin(["👤 Admin"])
-    Leader(["👥 iCare Leader"])
-    Member(["📱 Church Member"])
+    MEMBER(["👤 Church Member"])
+    ADMIN(["🔧 Admin"])
+    ILEADER(["📋 iCare Leader"])
 
-    subgraph "Admin Functions"
-        UC_AddMember["Add / Edit Member"]
-        UC_ViewAttend["View Attendance Reports"]
-        UC_ManageGroups["Manage iCare Groups"]
-        UC_Settings["System Settings"]
+    ADMIN -. "extends" .-> MEMBER
+    ILEADER -. "extends" .-> MEMBER
+
+    subgraph sys["⛪ ChurchCRM System"]
+
+        subgraph mem_uc["Church Member (Public Portal)"]
+            M1(["Login / 2FA"])
+            M2(["View Own Profile"])
+            M3(["Scan QR → Check In"])
+            M4(["Request QR via Email"])
+            M5(["Self-Register"])
+        end
+
+        subgraph icare_uc["iCare Leader"]
+            I1(["View Cell Group Members"])
+            I2(["Start Meeting Session"])
+            I3(["Mark Member Attendance"])
+            I4(["Register Walk-in Visitor"])
+            I5(["Upload Meeting Photo"])
+            I6(["View Meeting History"])
+        end
+
+        subgraph admin_uc["Admin"]
+            A1(["Add / Edit Members & Families"])
+            A2(["Manage Groups & Roles"])
+            A3(["Manage Events & Calendars"])
+            A4(["Manage Finance & Deposits"])
+            A5(["Manage Users & Permissions"])
+            A6(["View Attendance Reports"])
+            A7(["Configure System Settings"])
+            A8(["Manage Kiosk Devices"])
+        end
+
     end
 
-    subgraph "iCare Leader Functions"
-        UC_RecordIcare["Record iCare Attendance"]
-        UC_UploadPhoto["Upload Meeting Photo"]
-        UC_AddVisitor["Register Visitor"]
-    end
+    MEMBER --- M1
+    MEMBER --- M2
+    MEMBER --- M3
+    MEMBER --- M4
+    MEMBER --- M5
 
-    subgraph "Member Functions (Public Portal)"
-        UC_ScanQR["Scan QR → Check In"]
-        UC_ResendQR["Request QR via Email"]
-        UC_Register["Self-Register"]
-    end
+    ILEADER --- I1
+    ILEADER --- I2
+    ILEADER --- I3
+    ILEADER --- I4
+    ILEADER --- I5
+    ILEADER --- I6
 
-    Admin --> UC_AddMember
-    Admin --> UC_ViewAttend
-    Admin --> UC_ManageGroups
-    Admin --> UC_Settings
-    Leader --> UC_RecordIcare
-    Leader --> UC_UploadPhoto
-    Leader --> UC_AddVisitor
-    Member --> UC_ScanQR
-    Member --> UC_ResendQR
-    Member --> UC_Register
+    ADMIN --- A1
+    ADMIN --- A2
+    ADMIN --- A3
+    ADMIN --- A4
+    ADMIN --- A5
+    ADMIN --- A6
+    ADMIN --- A7
+    ADMIN --- A8
 
-    UC_AddMember -.->|triggers| UC_ResendQR
+    A1 -. "triggers" .-> M4
 ```
 
 ---
@@ -297,719 +324,98 @@ sequenceDiagram
 
 ## Class Diagram
 
-Two diagrams are presented: **Current State** (what is implemented) and **Target Architecture** (what must be added to satisfy all requirements discussed in this project).
-
----
-
-### Current State — Domain Entities
-
-> Scanned from `src/ChurchCRM/model/ChurchCRM/`. All non-Base, non-Query classes. Propel `ActiveRecord` represents the generated ORM base.
+> **ERD rules applied:**
+> - **iCare = Group{type=CellGroup}** — no separate iCare entity; `group_grp` with a type discriminator covers all group kinds (iCare, Sunday School, committees, etc.)
+> - **1:1 → merged** into one table (Person absorbs User — same PK, login columns nullable)
+> - **1:N → FK** in the child table (no separate join table needed)
+> - **M:N → pivot table** (`GroupMembership` links Person ↔ Group with a role)
 
 ```mermaid
 classDiagram
     direction TB
 
-    class PhotoInterface {
-        <<interface>>
-        +getPhoto()
-        +deletePhoto()
-        +setImageFromBase64(base64) void
-    }
-
-    class ActiveRecord {
-        <<Propel ORM base>>
-        +save() int
-        +delete() void
-        +toArray() array
-        +fromArray(data) void
-    }
+    %% ══════════════════════════════════════════════════════
+    %% ENTITIES
+    %% ══════════════════════════════════════════════════════
 
     class Person {
-        +int per_ID
-        +string per_FirstName
-        +string per_LastName
-        +string per_Email
-        +string per_CellPhone
-        +int per_BirthDay
-        +int per_BirthMonth
-        +int per_BirthYear
-        +int per_cls_ID
-        +int per_fam_ID
-        +getFullName() string
-        +getBirthDate() DateTimeImmutable?
-        +getEmail() string?
-        +getPhoto() Photo
-        +setImageFromBase64(base64) void
-        +deletePhoto() bool
-        +postInsert(con) void
-        +postUpdate(con) void
-        +postSave(con) void
-        +getGroups() array
-        +isUser() bool
-        +getAddress() string
-        +getBestPhone() string
-        +getFormattedName(style) string
-    }
-
-    class Family {
-        +int fam_ID
-        +string fam_Name
-        +string fam_Address1
-        +string fam_City
-        +string fam_Email
-        +getPeopleSorted() array
-        +getHeadPeople() array
-        +getEmails() array
-        +postInsert(con) void
-        +getPhoto() Photo?
-        +setImageFromBase64(base64) void
-        +verify() void
-        +isActive() bool
-        +hasLatitudeAndLongitude() bool
-    }
-
-    class Group {
-        +int grp_ID
-        +string grp_Name
-        +int grp_Type
-        +bool grp_active
-        +int grp_RoleListID
-        +int grp_DefaultRole
-    }
-
-    class Person2group2roleP2g2r {
-        +int p2g2r_per_ID
-        +int p2g2r_grp_ID
-        +int p2g2r_rle_ID
-        +getPerson() Person
-        +getGroup() Group
-    }
-
-    class ICareMeeting {
-        +int id
-        +int group_id
-        +Date meeting_date
-        +string location
-        +string notes
-        +string photo_filename
-        +int created_by
-        +DateTime created_at
-        +getGroup() Group
-    }
-
-    class ICareAttendance {
-        +int id
-        +int meeting_id
-        +int person_id
-        +DateTime recorded_at
-    }
-
-    class ICareVisitor {
-        +int id
-        +int meeting_id
-        +string full_name
-        +string phone
-        +string instagram
-        +string address
-        +DateTime created_at
-    }
-
-    class Event {
-        +int event_id
-        +int event_type
-        +string event_title
-        +DateTime event_start
-        +DateTime event_end
-        +bool inactive
-        +checkInPerson(personId, checkedInById) array
-        +checkOutPerson(personId, checkedOutById) array
-        +getEventAttends() array
-    }
-
-    class EventAttend {
-        +int attend_id
-        +int event_id
-        +int person_id
-        +DateTime checkin_date
-        +DateTime checkout_date
-    }
-
-    class EventCounts {
-        +int evtcnt_eventid
-        +int evtcnt_countid
-        +string evtcnt_countname
-        +int evtcnt_countcount
-    }
-
-    class KioskDevice {
-        +int kdev_ID
-        +string kdev_GUIDHash
-        +bool kdev_Accepted
-        +string kdev_Name
-    }
-
-    class KioskAssignment {
-        +int kasm_ID
-        +int kasm_kdev_ID
-        +int kasm_evt_ID
-    }
-
-    class User {
-        +int usr_ID
-        +string usr_Login
-        +string usr_Password
-        +int usr_per_ID
-        +bool usr_Admin
-        +isAdmin() bool
-        +isEditRecordsEnabled() bool
-        +canEditPerson(personId, famId) bool
-    }
-
-    class Note {
-        +int nte_ID
-        +int nte_per_ID
-        +string nte_Text
-        +DateTime nte_DateEntered
-        +string nte_Type
-    }
-
-    %% Inheritance from Propel ActiveRecord
-    Person --|> ActiveRecord
-    Family --|> ActiveRecord
-    Group --|> ActiveRecord
-    Event --|> ActiveRecord
-    EventAttend --|> ActiveRecord
-    EventCounts --|> ActiveRecord
-    ICareMeeting --|> ActiveRecord
-    ICareAttendance --|> ActiveRecord
-    ICareVisitor --|> ActiveRecord
-    User --|> ActiveRecord
-    Note --|> ActiveRecord
-
-    %% Interface implementations
-    Person ..|> PhotoInterface
-    Family ..|> PhotoInterface
-
-    %% Associations
-    Person "N" --> "1" Family : belongs to
-    Person2group2roleP2g2r --> Person
-    Person2group2roleP2g2r --> Group
-    ICareMeeting "N" --> "1" Group : held by
-    ICareAttendance "N" --> "1" ICareMeeting
-    ICareAttendance "N" --> "1" Person
-    ICareVisitor "N" --> "1" ICareMeeting
-    EventAttend "N" --> "1" Event
-    EventAttend "N" --> "1" Person
-    EventCounts "N" --> "1" Event
-    KioskAssignment --> KioskDevice
-    KioskAssignment --> Event
-    User --> Person : linked via usr_per_ID
-    Note "N" --> "1" Person
-```
-
----
-
-### Current State — Service, Email & Infrastructure
-
-```mermaid
-classDiagram
-    direction TB
-
-    %% ── Infrastructure ───────────────────────────────────────────────────────
-
-    class IAuthenticationProvider {
-        <<interface>>
-        +authenticate(request) AuthenticationResult
-        +validateUserSessionIsActive(update) AuthenticationResult
-        +getCurrentUser() User?
-        +endSession() void
-        +getPasswordChangeURL() string
-    }
-
-    class LocalAuthentication {
-        +authenticate(request) AuthenticationResult
-        +validateUserSessionIsActive(update) AuthenticationResult
-        +getCurrentUser() User?
-        +endSession() void
-        +getPasswordChangeURL() string
-        +getTwoFactorQRCode(username, secret)$ QrCode
-    }
-
-    class AuthenticationManager {
-        <<static facade>>
-        +getAuthenticationProvider()$ IAuthenticationProvider
-        +getCurrentUser()$ User
-        +isUserAuthenticated()$ bool
-        +authenticate(request)$ AuthenticationResult
-        +endSession(preventRedirect)$ void
-        +ensureAuthentication()$ void
-        +redirectHomeIfFalse(hasAccess, role)$ void
-        +redirectHomeIfNotAdmin()$ void
-    }
-
-    class AuthenticationResult {
-        +bool isAuthenticated
-        +string message
-    }
-
-    class HookManager {
-        <<static>>
-        +addAction(hook, callback, priority)$ void
-        +doAction(hook, args)$ void
-        +addFilter(hook, callback, priority)$ void
-        +applyFilters(hook, value, args)$ mixed
-        +removeAction(hook, callback)$ bool
-        +hasAction(hook)$ bool
-        +doingHook(hook)$ bool
-        +reset()$ void
-    }
-
-    class SystemConfig {
-        <<static DTO>>
-        +getValue(name)$ mixed
-        +getBooleanValue(name)$ bool
-        +getIntValue(name)$ int
-        +setValue(name, value)$ void
-        +isEmailEnabled()$ bool
-        +hasValidMailServerSettings()$ bool
-        +init(configs)$ void
-    }
-
-    class SystemURLs {
-        <<static DTO>>
-        +getRootPath()$ string
-        +getDocumentRoot()$ string
-        +getImagesRoot()$ string
-        +getURL(index)$ string
-        +getCSPNonce()$ string?
-    }
-
-    LocalAuthentication ..|> IAuthenticationProvider
-    AuthenticationManager --> IAuthenticationProvider : delegates to
-    AuthenticationManager --> AuthenticationResult : returns
-
-    %% ── Services ─────────────────────────────────────────────────────────────
-
-    class QrCodeService {
-        <<static utility>>
-        -QR_API$ = https://api.qrserver.com
-        +getPersonCheckInUrl(person)$ string
-        +fetchQrCodePng(url, sizePx)$ string
-        +generateToken(personId)$ string
-        +verifyToken(personId, token)$ bool
-        -getSecret()$ string
-    }
-
-    class ICareService {
-        -PHOTO_MAX_WIDTH$ = 1200
-        -PHOTO_MAX_HEIGHT$ = 900
-        -PHOTO_QUALITY$ = 82
-        -PHOTO_MAX_BYTES$ = 307200
-        -PHOTO_DIR$ = iCare
-        +getGroupsForUser(userId) array
-        +getGroupMembers(groupId) array
-        +getMeetingsForGroup(groupId, limit) array
-        +getMeetingDetail(meetingId) array
-        +createMeeting(groupId, userId, data) ICareMeeting
-        +saveMeetingPhoto(meetingId, base64DataUri) string
-        +getMeetingPhotoPath(meetingId) string?
-        +deleteMeeting(meetingId) void
-    }
-
-    class PersonService {
-        +search(term, includeFamilyRole) array
-        +getPeopleEmailsAndGroups() array
-        +addVolunteerOpportunity(personId, oppId) bool
-        +removeVolunteerOpportunity(personId, oppId) void
-        +getFamilyList(roleHead, roleSpouse, cls, term) array
-        +getMissingGenderDataCount() int
-    }
-
-    class GroupService {
-        +addUserToGroup(groupId, personId, roleId) array
-        +removeUserFromGroup(groupId, personId) void
-        +getGroupRoles(groupId) array
-        +getGroupMembers(groupId, personId) array
-        +addGroupRole(groupId, roleName) array
-        +deleteGroupRole(groupId, roleId) array
-    }
-
-    class EventService {
-        -MAX_REPEAT_OCCURRENCES$ = 366
-        +createRepeatEvents(data) int[]
-    }
-
-    class DashboardService {
-        +getFamilyCount() array
-        +getDashboardStats() array
-        +getGroupStats() array
-        +getLatestMembers(limit) array
-        +getUpdatedMembers(limit) array
-    }
-
-    class UserService {
-        +getAllUsers() collection
-        +getUserById(id) User?
-        +getUserStats() array
-        +isUserLocked(user) bool
-        +getLockedUsers() collection
-    }
-
-    ICareService ..> ICareMeeting : manages
-    ICareService ..> ICareAttendance : records
-    ICareService ..> ICareVisitor : registers
-    ICareService ..> SystemURLs : uses
-    QrCodeService ..> Person : generates URL for
-    QrCodeService ..> SystemConfig : reads secret
-    QrCodeService ..> SystemURLs : builds URL
-    PersonService ..> Person : queries
-    GroupService ..> Group : manages
-    GroupService ..> Person2group2roleP2g2r : manages
-    EventService ..> Event : creates
-
-    %% ── Email hierarchy ──────────────────────────────────────────────────────
-
-    class BaseEmail {
-        <<abstract>>
-        #PHPMailer mail
-        #Twig\Environment twig
-        +send() bool
-        +getError() string
-        +addStringAttachment(data, filename) void
-        +buildMessage() string
-        +getCommonTokens() array
-        #getTemplateName() string
-        #getTokens() array*
-        #getPreheader() string
-    }
-
-    class BaseUserEmail {
-        <<abstract>>
-        #User user
-        +getTokens() array
-    }
-
-    class WelcomeMemberEmail {
-        -Person person
-        -string checkInUrl
-        -string? qrCid
-        +getTokens() array
-        +getSubSubject() string
-        +getPreheader() string
-        +sendIfEnabled(person)$ void
-    }
-
-    class NewPersonOrFamilyEmail {
-        +getTokens() array
-        +sendIfConfigured(obj)$ void
-    }
-
-    class NewAccountEmail {
-        -string password
-        +getTokens() array
-    }
-
-    class ResetPasswordEmail {
-        -string password
-        +getTokens() array
-    }
-
-    class TestEmail {
-        +getTokens() array
-    }
-
-    class FamilyVerificationEmail {
-        +getTokens() array
-    }
-
-    BaseEmail <|-- BaseUserEmail
-    BaseEmail <|-- WelcomeMemberEmail
-    BaseEmail <|-- NewPersonOrFamilyEmail
-    BaseEmail <|-- TestEmail
-    BaseEmail <|-- FamilyVerificationEmail
-    BaseUserEmail <|-- NewAccountEmail
-    BaseUserEmail <|-- ResetPasswordEmail
-    BaseUserEmail <|-- AccountDeletedEmail
-    BaseUserEmail <|-- LockedEmail
-    BaseUserEmail <|-- UnlockedEmail
-    BaseUserEmail <|-- ResetPasswordTokenEmail
-
-    WelcomeMemberEmail ..> QrCodeService : fetches QR PNG
-    WelcomeMemberEmail ..> Person : sends to
-    NewPersonOrFamilyEmail ..> Person : notifies about
-    NewPersonOrFamilyEmail ..> SystemConfig : checks recipients
-```
-
----
-
-### Target Architecture — Planned Extensions
-
-> Classes and associations that **must be added** to satisfy the requirements discussed in this project. Marked `<<planned>>`.
-
-```mermaid
-classDiagram
-    direction TB
-
-    %% ── Existing classes referenced ──────────────────────────────────────────
-
-    class Person { }
-    class Group { }
-    class IAuthenticationProvider {
-        <<interface>>
-    }
-    class QrCodeService { }
-    class WelcomeMemberEmail { }
-
-    %% ── Google OAuth — member & admin login ──────────────────────────────────
-
-    class GoogleOAuthProvider {
-        <<planned>>
-        -string clientId
-        -string clientSecret
-        +authenticate(request) AuthenticationResult
-        +validateUserSessionIsActive(update) AuthenticationResult
-        +getCurrentUser() Person?
-        +endSession() void
-        +getPasswordChangeURL() string
-        +generateRedirectUrl(state) string
-        +exchangeCode(code) GoogleProfile
-        +findOrLinkPerson(googleSub, email) Person?
-        +linkPersonToGoogleSub(person, sub) void
-    }
-
-    class GoogleOAuthRequest {
-        <<planned>>
-        +string code
-        +string state
-        +string redirectUri
-    }
-
-    class GoogleProfile {
-        <<planned>>
-        +string sub
-        +string email
-        +string name
-        +string picture
-    }
-
-    note for Person "Requires new column:\nper_google_sub VARCHAR(64) UNIQUE NULL\nper_google_email VARCHAR(100) NULL"
-
-    %% ── iCare Co-leaders ─────────────────────────────────────────────────────
-
-    class ICareCoLeader {
-        <<planned>>
-        +int id
-        +int group_id
-        +int person_id
-        +Date added_date
-        +bool is_active
-        +getGroup() Group
-        +getPerson() Person
-    }
-
-    note for ICareCoLeader "Table: icare_co_leaders\nRole: can submit attendance\nfor their assigned group"
-
-    %% ── Google Calendar birthday push ────────────────────────────────────────
-
-    class GoogleCalendarService {
-        <<planned>>
-        -string calendarId
-        -GoogleClient client
-        +createBirthdayEvent(person) string
-        +updateBirthdayEvent(person) void
-        +deleteBirthdayEvent(person) void
-        +syncAllBirthdays() array
-        +getBirthdayEventId(person) string?
-        -buildEventDescription(person) string
-    }
-
-    note for GoogleCalendarService "Requires:\n- Google service account JSON\n- sGoogleCalendarId setting\n- per_birthday_event_id column on Person\n(or separate mapping table)"
-
-    %% ── Member self-service (post-OAuth) ─────────────────────────────────────
-
-    class MemberPortalService {
-        <<planned>>
-        +findPersonByEmail(email) Person?
-        +sendQrCodeByEmail(person) void
-        +updateMemberProfile(person, data) void
-        +createMemberSession(person) string
-        +validateMemberSession(token) Person?
-    }
-
-    class MemberSession {
-        <<planned>>
-        +string token
-        +int person_id
-        +DateTime expires_at
-        +bool isExpired() bool
-    }
-
-    %% ── Fingerprint import ───────────────────────────────────────────────────
-
-    class FingerprintImportService {
-        <<planned>>
-        +importTsv(filePath, activityTypeId) array
-        +parseRow(line) array
-        +matchPersonByFingerprintId(fpId) Person?
-    }
-
-    %% ── Birthday .ics export ─────────────────────────────────────────────────
-
-    class BirthdayIcsExportService {
-        <<planned>>
-        +generateIcsFeed() string
-        +generateIcsForPerson(person) string
-        -formatDate(birthDay, birthMonth) string
-    }
-
-    %% ── Relationships ────────────────────────────────────────────────────────
-
-    GoogleOAuthProvider ..|> IAuthenticationProvider
-    GoogleOAuthProvider ..> GoogleOAuthRequest : accepts
-    GoogleOAuthProvider ..> GoogleProfile : produces
-    GoogleOAuthProvider ..> MemberPortalService : delegates lookup
-    GoogleOAuthProvider ..> Person : links
-
-    ICareCoLeader --> Group
-    ICareCoLeader --> Person
-
-    GoogleCalendarService ..> Person : reads birthday
-    GoogleCalendarService ..> SystemConfig : reads calendarId
-
-    MemberPortalService ..> Person : looks up & updates
-    MemberPortalService ..> QrCodeService : generates QR URL
-    MemberPortalService ..> WelcomeMemberEmail : sends QR email
-    MemberPortalService ..> MemberSession : creates
-
-    FingerprintImportService ..> Person : matches by fp_id
-    BirthdayIcsExportService ..> Person : reads birthdays
-```
-
----
-
-## Entity Relationship Diagram
-
-> **Note:** The ERD is expressed as a **UML Class Diagram** because each database table maps 1-to-1 to a Propel ORM model class. The `<<entity>>` stereotype marks persistence classes; attributes carry SQL types; key ORM methods are included. This format is richer than a plain ERD while remaining a complete database specification.
-
-### Key Distinction: Person vs User
-
-| Concept | Meaning |
-| --- | --- |
-| **Person** (`person_per`) | Every human stored in the system — church members, family members, guests, CRM staff. No login required. |
-| **User** (`user_usr`) | The subset of Persons who have CRM login credentials. `User` is a **specialization of Person**: its primary key `usr_per_ID` is the same value as `person_per.per_ID`. You cannot create a User without first creating a Person. Most Persons never become Users. |
-
-> **Rule:** Person ← is-a ← User. A User record adds credentials and permissions on top of an existing Person record. They share one PK value.
-
-### Entity Overview
-
-| ORM Class | DB Table | Purpose |
-| --- | --- | --- |
-| `Person` | `person_per` | Every person in the system (members, family, staff) |
-| `User` | `user_usr` | **Specializes Person** — adds CRM login + permissions |
-| `Family` | `family_fam` | Household / church-location grouping |
-| `Group` | `group_grp` | Generic group (iCare cells, Sunday School, any type) |
-| `GroupMembership` | `person2group2role_p2g2r` | Person ↔ Group ↔ Role junction table |
-| `IcareMeeting` | `icare_meeting` | One weekly iCare cell-group session |
-| `IcareAttendance` | `icare_attendance` | Member attendance at an iCare session |
-| `IcareVisitor` | `icare_visitor` | Walk-in non-member at iCare |
-| `Event` | `events_event` | All church events (Sunday, Worship Night, special) |
-| `EventAttendance` | `event_attend` | Individual QR scan check-in at an event |
-| `EventHeadcount` | `eventcounts_evtcnt` | Aggregate per-category count per event session |
-| `KioskDevice` | `kioskdevice_kdev` | Registered check-in tablet/kiosk |
-
-```mermaid
-classDiagram
-    direction TB
-
-    class Member {
-        <<entity: person_per>>
-        +MEDIUMINT per_ID PK
-        +VARCHAR per_FirstName
-        +VARCHAR per_LastName
-        +VARCHAR per_Email
-        +VARCHAR per_CellPhone
-        +VARCHAR per_Facebook "LINE ID"
-        +VARCHAR per_Twitter  "Instagram"
-        +TINYINT  per_BirthDay
-        +TINYINT  per_BirthMonth
-        +SMALLINT per_BirthYear
-        +TINYINT  per_cls_ID  FK
-        +SMALLINT per_fam_ID  FK
-        +DATETIME per_DateEntered
-        +DATETIME per_DateLastEdited
-        +getBirthDate() DateTimeImmutable
-        +getFullName() string
-        +getEmail() string
-        +getGroups() array
-        +postInsert(con) void
-        +postUpdate(con) void
+        <<entity: person_per + user_usr>>
+        +MEDIUMINT id               PK
+        +VARCHAR   first_name
+        +VARCHAR   last_name
+        +VARCHAR   email
+        +VARCHAR   cell_phone       "WhatsApp"
+        +VARCHAR   line_id
+        +VARCHAR   instagram
+        +TINYINT   kategori_id      FK "Adult|College|Youth|Kids"
+        +SMALLINT  family_id        FK
+        +VARCHAR   taiwan_domicile
+        +VARCHAR   indonesia_domicile
+        +TIMESTAMP registered_at
+        --- login fields nullable for non-CRM users ---
+        +VARCHAR   username         "NULL if no login"
+        -VARCHAR   password_hash    "bcrypt, NULL if no login"
+        +BOOLEAN   is_admin
+        +BOOLEAN   can_edit_records
+        +BOOLEAN   can_manage_groups
+        +hasLogin() Boolean
+        +isAdmin() Boolean
+        +getFullName() String
     }
 
     class Family {
         <<entity: family_fam>>
-        +MEDIUMINT fam_ID PK
-        +VARCHAR   fam_Name
-        +VARCHAR   fam_Address1
-        +VARCHAR   fam_Address2
-        +VARCHAR   fam_City
-        +VARCHAR   fam_State
-        +VARCHAR   fam_Zip
-        +VARCHAR   fam_Country
-        +VARCHAR   fam_Email
-        +DOUBLE    fam_Latitude
-        +DOUBLE    fam_Longitude
-        +getPeopleSorted() array
-        +getEmails() array
-        +isActive() bool
+        +MEDIUMINT id               PK
+        +VARCHAR   name
+        +VARCHAR   address
+        +VARCHAR   city
+        +VARCHAR   country
+        +DOUBLE    latitude
+        +DOUBLE    longitude
+        +isActive() Boolean
     }
 
-    class IcareGroup {
+    class Group {
         <<entity: group_grp>>
-        +MEDIUMINT grp_ID   PK
-        +VARCHAR   grp_Name
-        +TINYINT   grp_Type
-        +MEDIUMINT grp_RoleListID  FK
-        +MEDIUMINT grp_DefaultRole FK
-        +TEXT      grp_Description
-        +BOOLEAN   grp_hasSpecialProps
-        +BOOLEAN   grp_active
+        +MEDIUMINT id               PK
+        +VARCHAR   name             "iCare TMS, iCare U, Sunday School..."
+        +TINYINT   type             "iCare=0 | SundaySchool=4 | ..."
+        +BOOLEAN   is_active
+        +getMembers() List
+    }
+    note for Group "iCare IS a Group where type = CellGroup.\nNo separate iCare entity is needed —\nthe type field discriminates all group kinds."
+
+    class GroupMembership {
+        <<pivot: person2group2role_p2g2r>>
+        +MEDIUMINT person_id        FK
+        +MEDIUMINT group_id         FK
+        +TINYINT   role             "Leader=1 Member=2"
     }
 
-    class IcareMembership {
-        <<entity: person2group2role_p2g2r>>
-        +MEDIUMINT p2g2r_per_ID FK
-        +MEDIUMINT p2g2r_grp_ID FK
-        +MEDIUMINT p2g2r_rle_ID FK "Leader=1 Member=2"
-        +getPerson() Member
-        +getGroup()  IcareGroup
-    }
-
-    class IcareMeeting {
+    class Meeting {
         <<entity: icare_meeting>>
-        +INT       id           PK
-        +SMALLINT  group_id     FK
+        +INT       id               PK
+        +INT       group_id         FK → Group(type=iCare)
         +DATE      meeting_date
         +VARCHAR   location
-        +LONGTEXT  notes
-        +VARCHAR   photo_filename "JPEG ≤ 300 KB"
-        +INT       created_by   FK
+        +TEXT      notes
+        +VARCHAR   photo_filename   "JPEG stored on disk"
+        +INT       recorded_by      FK "Person.id"
         +TIMESTAMP created_at
-        +getGroup() IcareGroup
     }
 
-    class IcareAttendance {
+    class MeetingAttendance {
         <<entity: icare_attendance>>
-        +INT       id         PK
-        +INT       meeting_id FK
-        +INT       person_id  FK
+        +INT       id               PK
+        +INT       meeting_id       FK
+        +INT       person_id        FK
         +TIMESTAMP recorded_at
-        "UNIQUE(meeting_id, person_id)"
     }
 
-    class IcareVisitor {
+    class MeetingVisitor {
         <<entity: icare_visitor>>
-        +INT       id         PK
-        +INT       meeting_id FK
+        +INT       id               PK
+        +INT       meeting_id       FK
         +VARCHAR   full_name
         +VARCHAR   phone
         +VARCHAR   instagram
@@ -1019,227 +425,273 @@ classDiagram
 
     class Event {
         <<entity: events_event>>
-        +INT       event_id   PK
-        +INT       event_type FK
-        +VARCHAR   event_title
-        +VARCHAR   event_desc
-        +TIMESTAMP event_start
-        +TIMESTAMP event_end
-        +INT       inactive   "0=active"
-        +checkInPerson(pid, byId) array
-        +checkOutPerson(pid, byId) array
-        +getEventAttends() collection
+        +INT       id               PK
+        +TINYINT   type             "SuperSunday|WorshipNight|Special"
+        +VARCHAR   title
+        +VARCHAR   sub_type         "school, event name, location"
+        +TIMESTAMP start_time
+        +TIMESTAMP end_time
     }
 
-    class EventAttendance {
+    class Attendance {
         <<entity: event_attend>>
-        +INT      attend_id    PK
-        +INT      event_id     FK
-        +INT      person_id    FK
-        +DATETIME checkin_date
-        +INT      checkin_id   FK
-        +DATETIME checkout_date
-        +INT      checkout_id  FK
-        "UNIQUE(event_id, person_id)"
+        +INT       id               PK
+        +INT       event_id         FK
+        +INT       person_id        FK
+        +TIMESTAMP checkin_time
+        +INT       scanned_by       FK "Person.id"
     }
 
-    class EventCount {
+    class Headcount {
         <<entity: eventcounts_evtcnt>>
-        +INT     evtcnt_eventid  FK
-        +INT     evtcnt_countid  FK
-        +VARCHAR evtcnt_countname "Adult|College|Youth|Kids|Online"
-        +INT     evtcnt_countcount
-        +VARCHAR evtcnt_notes
+        +INT       id               PK
+        +INT       event_id         FK
+        +VARCHAR   category         "Adult|College|Youth|Kids|Online"
+        +INT       count
+        +VARCHAR   reporter
     }
 
-    class KioskDevice {
-        <<entity: kioskdevice_kdev>>
-        +MEDIUMINT kdev_ID           PK
-        +CHAR      kdev_GUIDHash
-        +VARCHAR   kdev_Name
-        +MEDIUMINT kdev_deviceType
-        +TIMESTAMP kdev_lastHeartbeat
-        +BOOLEAN   kdev_Accepted
-        +VARCHAR   kdev_PendingCommands
+    %% ══════════════════════════════════════════════════════
+    %% SERVICES
+    %% ══════════════════════════════════════════════════════
+
+    class ICareService {
+        <<service>>
+        +getGroupsForUser(userId Integer) List
+        +getGroupMembers(groupId Integer) List
+        +getMeetingsForGroup(groupId Integer) List
+        +createMeeting(groupId Integer, userId Integer, data Map) Meeting
+        +saveMeetingPhoto(meetingId Integer, base64 String) String
+        +deleteMeeting(meetingId Integer) void
+        +addMember(groupId Integer, personId Integer, role Integer) void
+        +removeMember(groupId Integer, personId Integer) void
     }
 
-    class User {
-        <<entity: user_usr>>
-        +MEDIUMINT usr_per_ID     PK FK
-        +VARCHAR   usr_Password
-        +DATETIME  usr_LastLogin
-        +SMALLINT  usr_LoginCount
-        +TINYINT   usr_AddRecords
-        +TINYINT   usr_EditRecords
-        +TINYINT   usr_Admin
-        +TINYINT   usr_MenuOptions
-        +isAdmin() bool
-        +isEditRecordsEnabled() bool
-        +canEditPerson(pid, famId) bool
+    class PersonService {
+        <<service>>
+        +getPeople(params Map) List
+        +findByEmail(email String) Person
     }
 
-    %% ── Relationships ────────────────────────────────────────────────────────
+    %% ══════════════════════════════════════════════════════
+    %% RELATIONSHIPS
+    %% ══════════════════════════════════════════════════════
 
-    Family       "1"  <--  "0..*" Member         : per_fam_ID
-    IcareGroup   "1"  <--  "0..*" IcareMembership : p2g2r_grp_ID
-    Member       "1"  <--  "0..*" IcareMembership : p2g2r_per_ID
-    IcareGroup   "1"  *--  "0..*" IcareMeeting    : group_id
-    IcareMeeting "1"  *--  "0..*" IcareAttendance : meeting_id
-    IcareMeeting "1"  *--  "0..*" IcareVisitor    : meeting_id
-    Member       "1"  <--  "0..*" IcareAttendance : person_id
-    Event        "1"  *--  "0..*" EventAttendance  : event_id
-    Member       "1"  <--  "0..*" EventAttendance  : person_id
-    Event        "1"  *--  "0..*" EventCount       : evtcnt_eventid
-    Member       "1"  --   "0..1" User             : usr_per_ID
+    %% 1:N  — FK on child side
+    Family          "1"  o--  "0..*" Person           : family_id
+    Group       "1"  *--  "0..*" Meeting           : group_id
+    Meeting         "1"  *--  "0..*" MeetingAttendance : meeting_id
+    Meeting         "1"  *--  "0..*" MeetingVisitor    : meeting_id
+    Person          "1"  o--  "0..*" MeetingAttendance : person_id
+    Person          "1"  o--  "0..*" Meeting           : recorded_by
+    Event           "1"  *--  "0..*" Attendance        : event_id
+    Event           "1"  *--  "0..*" Headcount         : event_id
+    Person          "1"  o--  "0..*" Attendance        : person_id
+
+    %% M:N — pivot table
+    Person       "1"  o--  "0..*" GroupMembership   : person_id
+    Group        "1"  o--  "0..*" GroupMembership   : group_id
+
+    %% Service dependencies
+    ICareService         ..>         Meeting
+    ICareService         ..>         MeetingAttendance
+    ICareService         ..>         MeetingVisitor
+    ICareService         ..>         Group
+    ICareService         ..>         GroupMembership
+    PersonService        ..>         Person
 ```
 
-### Member (`person_per`)
+### Data Dictionary
+### Person (person_per, user_usr combined)
 
-Represents every registered church member (jemaat). Sourced from the **Daftar Jemaat** registration form.
+Stores every person in the system — church members, family members, CRM staff.
+Login credentials (username, password, permissions) are stored as nullable columns on the same table, so no separate User table is needed.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `per_ID` | INT PK | Auto-increment |
-| `per_FirstName` | VARCHAR(50) | Full name (Latin script) |
-| `per_LastName` | VARCHAR(50) | — |
-| `per_Email` | VARCHAR(50) | Primary contact / login |
-| `per_CellPhone` | VARCHAR(30) | WhatsApp number |
-| `per_Facebook` | VARCHAR(50) | LINE ID (re-used field) |
-| `per_Twitter` | VARCHAR(50) | Instagram handle |
-| `per_BirthDay/Month/Year` | TINYINT/SMALLINT | Date of birth |
-| `per_Address1` | VARCHAR(50) | Taiwan domicile area |
-| `per_Address2` | VARCHAR(50) | Indonesian domicile |
-| `per_cls_ID` | TINYINT | **Kategori**: Adult / College / Teens & Youth / Kids |
-| `per_fam_ID` | SMALLINT FK → `family_fam` | Church location family grouping |
-| `per_DateEntered` | TIMESTAMP | Registration timestamp |
-| *(custom)* | — | Chinese name (中文名) |
-| *(custom)* | — | Profession (Siswa / Mahasiswa / Pekerja) |
-| *(custom)* | — | Education level |
-| *(custom)* | — | IFGF church location (Taipei / Zhongli) |
-| *(custom)* | — | Baptized (Y/N) |
-| *(custom)* | — | Indonesian home church |
+| `id` | MEDIUMINT PK | Auto-increment |
+| `first_name` | VARCHAR(50) | |
+| `last_name` | VARCHAR(50) | |
+| `email` | VARCHAR(100) | Primary contact |
+| `cell_phone` | VARCHAR(30) | WhatsApp number |
+| `line_id` | VARCHAR(50) | LINE messenger ID |
+| `instagram` | VARCHAR(100) | Instagram handle |
+| `birth_date` | DATE | Date of birth |
+| `kategori_id` | TINYINT FK | Adult / College / Teens & Youth / Kids |
+| `family_id` | SMALLINT FK → Family | Household grouping |
+| `taiwan_domicile` | VARCHAR(100) | Area in Taiwan |
+| `indonesia_domicile` | VARCHAR(100) | Indonesian home city |
+| `registered_at` | TIMESTAMP | Registration timestamp |
+| `username` | VARCHAR(32) UNIQUE NULL | `NULL` = no CRM login |
+| `password_hash` | VARCHAR(500) NULL | bcrypt; `NULL` if no login |
+| `is_admin` | BOOLEAN | CRM admin flag |
+| `can_edit_records` | BOOLEAN | Edit permission |
+| `can_manage_groups` | BOOLEAN | Group management permission |
 
-**Member Categories (`per_cls_ID`):**
+**Kategori (computed from profession × education):**
 
 | Kategori | Condition |
 | --- | --- |
-| Kids | SD (elementary school) |
-| Teens and Youth | Siswa/SMP or SMA/SMK |
-| College | Siswa/Mahasiswa + S1 or Diploma |
-| Adult | Pekerja (worker) |
+| Kids | SD (elementary) |
+| Teens and Youth | SMP / SMA |
+| College | Mahasiswa (S1 / Diploma) |
+| Adult | Pekerja (working professional) |
 
-### iCare Group (`group_grp`)
+> **DB note:** In the current ChurchCRM codebase, login data lives in `user_usr` (sharing `per_ID` as PK).
+> The merged-table design above reflects the simplified conceptual model; a future migration will collapse both tables into `person_per`.
 
-| Column | Type | Notes |
-| --- | --- | --- |
-| `grp_ID` | SMALLINT PK | Auto-increment |
-| `grp_Name` | VARCHAR(50) | e.g., "iCare TMS", "iCare Keelung" |
-| `grp_Type` | TINYINT | Group type ID for iCare |
-| `grp_active` | BOOLEAN | Active / disbanded |
-| `grp_RoleListID` | SMALLINT | Roles: Leader, Member |
+---
 
-**Known groups:** `iCare TMS` · `iCare U` · `iCare Keelung` · `iCare Linkou` · `iCare Immanuel` · `iCare Freshcare` · `iCare Tamkang` · `iCare Hsinchu` · `iCare Liming` · `iCare Home`
+### Family (family_fam)
 
-**Member → iCare via `person2group2role_p2g2r`:**
+Groups persons who share a household. Optional — a person may have no family record.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `p2g2r_per_ID` | FK → `person_per` | Member |
-| `p2g2r_grp_ID` | FK → `group_grp` | iCare group |
-| `p2g2r_rle_ID` | FK → `list_lst` | Role: Leader or Member |
+| `id` | MEDIUMINT PK | Auto-increment |
+| `name` | VARCHAR(100) | Household/family name |
+| `address` | VARCHAR(100) | Street address |
+| `city` | VARCHAR(50) | City in Taiwan |
+| `country` | VARCHAR(50) | |
+| `latitude` | DOUBLE | For map view |
+| `longitude` | DOUBLE | |
 
-### iCare Meeting (`icare_meeting`)
+---
+
+### Group (group\_grp)
+
+A group that meets regularly. The `type` field discriminates all group kinds — iCare cell groups, Sunday School, and committees all share this one entity.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | MEDIUMINT PK | Auto-increment |
+| `name` | VARCHAR(50) | e.g., "iCare TMS", "iCare U" |
+| `type` | TINYINT | 0 = iCare, 4 = Sunday School |
+| `is_active` | BOOLEAN | Active / disbanded |
+
+**Known iCare groups:** `iCare TMS` · `iCare U` · `iCare Keelung` · `iCare Linkou` · `iCare Immanuel` · `iCare Freshcare` · `iCare Tamkang` · `iCare Hsinchu` · `iCare Liming` · `iCare Home`
+
+---
+
+### GroupMembership pivot (person2group2role)
+
+M:N pivot connecting persons to groups with a role.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `person_id` | MEDIUMINT FK → Person | (composite PK) |
+| `group_id` | MEDIUMINT FK → Group | (composite PK) |
+| `role` | TINYINT | 1 = Leader, 2 = Member |
+
+---
+
+### Meeting (icare_meeting)
 
 One row per weekly iCare session.
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | INT PK | Auto-increment |
-| `group_id` | SMALLINT FK → `group_grp` | Which iCare group |
+| `group_id` | MEDIUMINT FK → Group | Which cell group |
 | `meeting_date` | DATE | Date of the session |
 | `location` | VARCHAR(255) | Physical venue (optional) |
 | `notes` | TEXT | Leader notes |
-| `photo_filename` | VARCHAR(255) | Group photo — JPEG, ≤ 300 KB |
-| `created_by` | INT FK → user | CRM user who recorded attendance |
+| `photo_filename` | VARCHAR(255) | JPEG file on disk, ≤ 300 KB |
+| `recorded_by` | MEDIUMINT FK → Person | Who recorded attendance |
 | `created_at` | TIMESTAMP | |
 
-### iCare Member Attendance (`icare_attendance`)
+---
+
+### MeetingAttendance (icare_attendance)
+
+Tracks existing members who attended a meeting session.
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | INT PK | Auto-increment |
-| `meeting_id` | INT FK → `icare_meeting` | Which session |
-| `person_id` | INT FK → `person_per` | Attending member |
+| `meeting_id` | INT FK → Meeting | Which session |
+| `person_id` | MEDIUMINT FK → Person | Attending member |
 | `recorded_at` | TIMESTAMP | |
 | **UNIQUE** | (`meeting_id`, `person_id`) | No duplicate check-ins |
 
-### iCare Visitor (`icare_visitor`)
+---
 
-Tracks **new walk-in visitors** (not yet members) who come to an iCare session.
+### MeetingVisitor (icare_visitor)
+
+New walk-in visitors (not yet in the system) who attended a session.
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | INT PK | Auto-increment |
-| `meeting_id` | INT FK → `icare_meeting` | Session visited |
-| `full_name` | VARCHAR(100) | Full name |
-| `phone` | VARCHAR(30) | WhatsApp / phone |
-| `instagram` | VARCHAR(100) | Instagram or social media handle |
+| `meeting_id` | INT FK → Meeting | Session visited |
+| `full_name` | VARCHAR(100) | |
+| `phone` | VARCHAR(30) | WhatsApp |
+| `instagram` | VARCHAR(100) | Social media handle |
 | `address` | VARCHAR(255) | Residential area (Taiwan) |
 | `created_at` | TIMESTAMP | |
 
-### Event (`events_event`)
+---
 
-| Event Type | Examples | Location |
+### Event (events_event)
+
+Church-wide event. Covers four types:
+
+| Type | Examples | Location |
 | --- | --- | --- |
-| **Super Sunday** | Weekly Sunday Gathering | Taipei (TPE) / Zhongli (ZL) |
-| **iCare** | Weekly cell group meeting | Per-group venue |
+| **Super Sunday** | Weekly Sunday Gathering | Taipei / Zhongli / Both |
+| **iCare** | (tracked via Meeting table instead) | Per-group venue |
 | **Worship Night** | School-based, volunteer, open | Taipei / Zhongli |
 | **Special Event** | Passover, Christmas, Retreat | Taipei / Zhongli / Offsite |
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `event_id` | INT PK | Auto-increment |
-| `event_type` | INT FK → `event_types` | Event category |
-| `event_title` | VARCHAR(255) | e.g., "Super Sunday — Taipei" |
-| `event_start` | TIMESTAMP | |
-| `event_end` | TIMESTAMP | |
-| `inactive` | INT | 0 = active |
+| `id` | INT PK | Auto-increment |
+| `type` | TINYINT | Event category |
+| `title` | VARCHAR(255) | e.g., "Super Sunday — Taipei" |
+| `sub_type` | VARCHAR(255) | School name, event name |
+| `start_time` | TIMESTAMP | |
+| `end_time` | TIMESTAMP | |
 
-### Event Attendance (`event_attend`)
+---
 
-Records individual member check-ins via personal QR code.
+### Attendance (event_attend)
 
-| Column | Type | Notes |
-| --- | --- | --- |
-| `attend_id` | INT PK | Auto-increment |
-| `event_id` | INT FK → `events_event` | Which event |
-| `person_id` | INT FK → `person_per` | Who checked in |
-| `checkin_date` | TIMESTAMP | Scan time |
-| `checkout_date` | TIMESTAMP | Optional checkout |
-| **UNIQUE** | (`event_id`, `person_id`) | One check-in per person per event |
-
-### Event Count (`eventcounts_evtcnt`)
-
-Aggregate headcount per event, broken down by Kategori.
+Individual QR-code check-in at a church-wide event.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `evtcnt_eventid` | INT FK → `events_event` | Which event |
-| `evtcnt_countname` | VARCHAR(20) | Adult / College / Teens & Youth / Kids / Online |
-| `evtcnt_countcount` | INT | Number of attendees |
-| `evtcnt_notes` | VARCHAR(20) | Reporter name |
+| `id` | INT PK | Auto-increment |
+| `event_id` | INT FK → Event | Which event |
+| `person_id` | MEDIUMINT FK → Person | Who checked in |
+| `checkin_time` | TIMESTAMP | Scan time |
+| `scanned_by` | MEDIUMINT FK → Person | Staff who processed |
+| **UNIQUE** | (`event_id`, `person_id`) | One check-in per person |
+
+---
+
+### Headcount (eventcounts_evtcnt)
+
+Aggregate per-category headcount for a Sunday or Worship Night session.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `event_id` | INT FK → Event | Which session |
+| `category` | VARCHAR(20) | Adult / College / Youth / Kids / Online |
+| `count` | INT | Number of attendees |
+| `reporter` | VARCHAR(20) | Name of reporter |
+
+---
 
 ### Business Rules
 
-1. **Primary iCare**: Every member is assigned to exactly one primary iCare group via `person2group2role_p2g2r`. `"Belum mengikuti"` means not yet assigned.
-2. **Cross-iCare visits**: A member may attend any iCare meeting — `icare_attendance` is not restricted to their primary group.
-3. **New visitors at iCare**: Stored in `icare_visitor` (lightweight record). After follow-up, they can be promoted to a full member and assigned an iCare group.
-4. **Sunday attendance**: Captured by QR code scan → `event_attend`. Aggregate counts (Adult/College/Youth/Kids/Online) also recorded in `eventcounts_evtcnt`.
-5. **Location split**: Super Sunday runs in **Taipei (TPE)** and **Zhongli (ZL)** independently — each is a separate `events_event` row.
-6. **QR code stability**: The QR code encodes `HMAC-SHA256(personId, secret)` and never changes when member details change. Only re-generated on explicit member request.
-7. **Photo size**: iCare meeting photos are compressed server-side to ≤ 300 KB (JPEG, max 1200×900 px) regardless of the original uploaded resolution.
+1. **Primary cell group**: Every member is assigned to one primary iCare group via `GroupMembership`. `"Belum mengikuti"` (not yet assigned) is the default.
+2. **Cross-group visits**: A member may attend any Meeting — `MeetingAttendance` is not restricted to their primary group.
+3. **New visitor flow**: Walk-in visitors at iCare go into `MeetingVisitor`. After follow-up, a full `Person` record is created and they are assigned to a iCare.
+4. **Sunday headcounts**: Aggregate totals (Adult/College/Youth/Kids/Online) go into `Headcount`. Individual QR scans also create `Attendance` rows for members who scan.
+5. **Location split**: Super Sunday runs in Taipei (TPE) and Zhongli (ZL) as separate `Event` rows; each row covers one physical location.
+6. **Login access**: A `Person` becomes a CRM user by setting `username` and `password_hash`. All other persons have those fields as `NULL`.
 
----
+
 
 ## API Reference
 

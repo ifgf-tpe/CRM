@@ -18,16 +18,20 @@ Structured development skills live in `.agents/skills/`. **Always consult the re
 | New API endpoint | `api-development.md` → `service-layer.md` → `slim-4-best-practices.md` → `security-best-practices.md` |
 | Migrate legacy page | `routing-architecture.md` → `admin-mvc-migration.md` → `frontend-development.md` |
 | Database / ORM work | `database-operations.md` → `db-schema-migration.md` |
-| UI / frontend changes | `responsive-design-guidelines.md` → `bootstrap-5-migration.md` → `frontend-development.md` → `webpack-typescript.md` |
+| UI / frontend changes | `table-action-menu.md` → `responsive-design-guidelines.md` → `tabler-components.md` → `bootstrap-5-migration.md` → `frontend-development.md` → `webpack-typescript.md` |
+| UI Tabler migration / new page | `tabler-components.md` → `tabler-migration-playbook.md` → `tabler-library-replacement.md` → `frontend-development.md` |
 | Datetime / timezone work | `timezone-handling.md` (event editor, calendar, kiosk, anything cross-tz) |
 | i18n / translations | `i18n-localization.md` → `locale-translation-workflow.md` → `frontend-development.md` |
 | Security issue | `security-best-practices.md` → `authorization-security.md` |
+| Security advisory | `security-advisory-review.md` → `github-interaction.md` → `authorization-security.md` |
 | New community plugin | `plugin-system.md` → `plugin-development.md` → `plugin-create.md` → `plugin-security-scan.md` |
 | Core plugin update (`src/plugins/core/*`) | `plugin-system.md` → `plugin-development.md` → `plugin-migration.md` |
 | Admin-side plugin audit | `plugin-system.md` → `plugin-compliance.md` |
 | iCare attendance / photo upload | `service-layer.md` → `database-operations.md` → `api-development.md` → `db-schema-migration.md` |
+| Groups page / MVC | `groups-mvc-guidelines.md` → `routing-architecture.md` → `admin-mvc-migration.md` |
+| Finance / currency display | `currency-localization.md` → `database-operations.md` → `frontend-development.md` |
 | Member QR code / public portal | `routing-architecture.md` → `security-best-practices.md` → `service-layer.md` |
-| Testing | `testing.md` → `cypress-testing.md` |
+| Testing | `testing.md` → `cypress-testing.md` → `testing-migration-e2e.md` |
 | Commit / PR | `git-workflow.md` → `github-interaction.md` |
 | Refactor | `refactor.md` → `service-layer.md` |
 | Performance | `performance-optimization.md` → `database-operations.md` |
